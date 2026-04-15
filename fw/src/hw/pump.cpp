@@ -3,9 +3,9 @@
 #include <Arduino.h>
 
 // ─── Watering state machine ────────────────────────────────────────────────────
-// IDLE    : pump OFF. If soil moisture < threshold → switch to PUMPING.
+// IDLE    : pump OFF. If soil moisture < threshold AND led_on → switch to PUMPING.
 // PUMPING : pump ON. Every watering_check_s seconds re-reads soil_pct.
-//           If soil moisture >= threshold → switch back to IDLE.
+//           If soil moisture >= threshold OR led_on goes false → switch back to IDLE.
 //
 // NOTE: Serial.println is intentionally absent from this module.
 // On arduino-mbed RP2040, USB CDC Serial.println() blocks indefinitely when
@@ -29,7 +29,7 @@ void pump_update(SensorData &data, const Settings &settings) {
 
   switch (pump_state) {
     case PUMP_IDLE:
-      if (data.soil_pct < settings.soil_threshold) {
+      if (data.led_on && data.soil_pct < settings.soil_threshold) {
         digitalWrite(GPIO_MOTOR, HIGH);
         pump_state    = PUMP_PUMPING;
         pump_check_ms = now;
@@ -38,6 +38,13 @@ void pump_update(SensorData &data, const Settings &settings) {
       break;
 
     case PUMP_PUMPING:
+      // Arrêt immédiat si les LEDs s'éteignent (fin de la période d'arrosage)
+      if (!data.led_on) {
+        digitalWrite(GPIO_MOTOR, LOW);
+        pump_state   = PUMP_IDLE;
+        data.pump_on = false;
+        break;
+      }
       // Periodic re-check
       if (now - pump_check_ms >= (uint32_t)settings.watering_check_s * 1000UL) {
         pump_check_ms = now;
