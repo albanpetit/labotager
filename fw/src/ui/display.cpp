@@ -16,9 +16,8 @@ static TFT_eSPI tft = TFT_eSPI();
 // Transitions:
 //   MODE_TAB          + PRESS (on SCREEN_PARAMS) → MODE_PARAM_SELECT
 //   MODE_PARAM_SELECT + PRESS                    → MODE_PARAM_EDIT
-//   MODE_PARAM_EDIT   + PRESS                    → MODE_PARAM_SELECT (confirm)
 //   MODE_PARAM_SELECT + LONG_PRESS               → MODE_TAB (applies RTC if dirty)
-//   MODE_PARAM_EDIT   + LONG_PRESS               → MODE_PARAM_SELECT (cancel)
+//   MODE_PARAM_EDIT   + LONG_PRESS               → MODE_PARAM_SELECT (confirms + applies RTC if dirty)
 
 enum UIMode { MODE_TAB, MODE_DETAILS_SCROLL, MODE_PARAM_SELECT, MODE_PARAM_EDIT };
 
@@ -555,14 +554,11 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
         } else if (ev == ENC_DOWN) {
           apply_delta(param_cursor, -1, settings);
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
-        } else if (ev == ENC_PRESS) {
+        } else if (ev == ENC_LONG_PRESS) {
           if (stg_rtc_dirty) {
             rtc_set_datetime(stg_year, stg_month, stg_day, stg_hour, stg_min, 0);
             stg_rtc_dirty = false;
           }
-          ui_mode = MODE_PARAM_SELECT;
-          render_param_row(param_cursor, param_cursor - params_scroll, true, false, settings);
-        } else if (ev == ENC_LONG_PRESS) {
           ui_mode = MODE_PARAM_SELECT;
           render_param_row(param_cursor, param_cursor - params_scroll, true, false, settings);
         }
