@@ -70,7 +70,7 @@ static void init_staged(const SensorData &data) {
 static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Heure",            // 0 — combiné : stg_hour:stg_min
   "Date",             // 1 — combiné : stg_day/stg_month/stg_year
-  "Jours croissance", // 2
+  "Debut pousse",     // 2 — combiné : grow_start_day/month/year
   "Debut eclairage",  // 3 — combiné : led_start_hour:led_start_min
   "Fin eclairage",    // 4 — combiné : led_end_hour:led_end_min
   "Seuil humidite %", // 5
@@ -83,13 +83,12 @@ static int param_edit_sub = 0;  // sous-champ actif pour les lignes combinées
 // Nombre de sous-champs par ligne combinée (0 = non combiné)
 static int combined_sub_count(int i) {
   if (i == 0 || i == 3 || i == 4) return 2;  // h, m
-  if (i == 1)                      return 3;  // j, m, a
+  if (i == 1 || i == 2)           return 3;  // j, m, a
   return 0;
 }
 
 static int get_param_val(int i, const Settings &s) {
   switch (i) {
-    case 2: return s.growth_days;
     case 5: return s.soil_threshold;
     case 6: return s.plant_temp_min;
     case 7: return s.plant_temp_max;
@@ -108,8 +107,10 @@ static void apply_delta(int i, int delta, Settings &s) {
       else if (param_edit_sub == 1) stg_month = (uint8_t)constrain((int)stg_month + delta, 1, 12);
       else                          stg_year  = (uint16_t)constrain((int)stg_year + delta, 2024, 2069);
       stg_rtc_dirty = true; break;
-    case 2:
-      s.growth_days        = (uint16_t)constrain((int)s.growth_days        + delta, 0, 9999);
+    case 2:  // Debut pousse combiné
+      if      (param_edit_sub == 0) s.grow_start_day   = (uint8_t)constrain((int)s.grow_start_day   + delta, 1, 31);
+      else if (param_edit_sub == 1) s.grow_start_month = (uint8_t)constrain((int)s.grow_start_month + delta, 1, 12);
+      else                          s.grow_start_year  = (uint16_t)constrain((int)s.grow_start_year  + delta, 2024, 2069);
       settings_dirty = true; break;
     case 3:  // Debut eclairage combiné
       if (param_edit_sub == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
@@ -129,6 +130,17 @@ static void apply_delta(int i, int delta, Settings &s) {
       s.plant_temp_max = (int8_t)constrain((int)s.plant_temp_max + delta, -40, 60);
       settings_dirty = true; break;
   }
+}
+
+// ─── Grow days calculation ────────────────────────────────────────────────────
+
+static int32_t julian_day(int d, int m, int y) {
+  return 367L*y - 7*(y+(m+9)/12)/4 + 275*m/9 + d + 1721013L;
+}
+
+static int32_t days_elapsed(int d1, int m1, int y1, int d2, int m2, int y2) {
+  int32_t diff = julian_day(d2, m2, y2) - julian_day(d1, m1, y1);
+  return diff < 0 ? 0 : diff;
 }
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
@@ -196,7 +208,13 @@ static void render_home_update(const SensorData &data, const Settings &settings)
     ui_draw_home_time("--:--");
   }
 
-  snprintf(buf, sizeof(buf), "J + %d", settings.growth_days);
+  if (settings.grow_start_day > 0 && data.rtc_ready) {
+    int32_t days = days_elapsed(settings.grow_start_day, settings.grow_start_month, settings.grow_start_year,
+                                data.day, data.month, data.year);
+    snprintf(buf, sizeof(buf), "J + %ld", days);
+  } else {
+    snprintf(buf, sizeof(buf), "J + --");
+  }
   ui_draw_home_grow_counter(buf);
 
   ui_draw_home_plant_status(plant_get_state(data, settings));
@@ -307,8 +325,15 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
 
   if (combined_sub_count(item_idx) > 0) {
     if (item_idx == 1) {
-      // Date : JJ/MM/AAAA
+      // Date courante : JJ/MM/AAAA
       snprintf(val, sizeof(val), "%02d/%02d/%04d", stg_day, stg_month, stg_year);
+      if (editing) {
+        const char *sub_names[] = { "j", "m", "a" };
+        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);
+      }
+    } else if (item_idx == 2) {
+      // Debut pousse : JJ/MM/AAAA
+      snprintf(val, sizeof(val), "%02d/%02d/%04d", s.grow_start_day, s.grow_start_month, s.grow_start_year);
       if (editing) {
         const char *sub_names[] = { "j", "m", "a" };
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);

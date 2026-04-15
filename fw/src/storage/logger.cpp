@@ -51,8 +51,10 @@ static void load_config(Settings &s) {
     else if (strcmp(key, "led_start_min")     == 0) s.led_start_min  = (uint8_t)val;
     else if (strcmp(key, "led_end_hour")      == 0) s.led_end_hour   = (uint8_t)val;
     else if (strcmp(key, "led_end_min")       == 0) s.led_end_min    = (uint8_t)val;
-    else if (strcmp(key, "log_interval_s")    == 0) s.log_interval_s     = (uint16_t)val;
-    else if (strcmp(key, "growth_days")       == 0) s.growth_days        = (uint16_t)val;
+    else if (strcmp(key, "log_interval_s")    == 0) s.log_interval_s   = (uint16_t)val;
+    else if (strcmp(key, "grow_start_day")    == 0) s.grow_start_day   = (uint8_t)val;
+    else if (strcmp(key, "grow_start_month")  == 0) s.grow_start_month = (uint8_t)val;
+    else if (strcmp(key, "grow_start_year")   == 0) s.grow_start_year  = (uint16_t)val;
     else if (strcmp(key, "owner_name")        == 0) {
       strncpy(s.owner_name, eq + 1, sizeof(s.owner_name) - 1);
       s.owner_name[sizeof(s.owner_name) - 1] = '\0';
@@ -175,7 +177,9 @@ void logger_save_settings(const Settings &s) {
   f.print("led_end_hour=");   f.println(s.led_end_hour);
   f.print("led_end_min=");    f.println(s.led_end_min);
   f.print("log_interval_s=");     f.println(s.log_interval_s);
-  f.print("growth_days=");        f.println(s.growth_days);
+  f.print("grow_start_day=");     f.println(s.grow_start_day);
+  f.print("grow_start_month=");   f.println(s.grow_start_month);
+  f.print("grow_start_year=");    f.println(s.grow_start_year);
   f.print("owner_name=");         f.println(s.owner_name);
   f.close();
 

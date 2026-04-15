@@ -56,6 +56,8 @@ struct Settings {
 
   uint16_t log_interval_s;        // seconds between CSV entries (default 300)
 
-  uint16_t growth_days;           // elapsed grow-days counter (shown on Home)
+  uint8_t  grow_start_day;        // grow start date — day   (0 = not set)
+  uint8_t  grow_start_month;      // grow start date — month (0 = not set)
+  uint16_t grow_start_year;       // grow start date — year  (0 = not set)
   char     owner_name[32];        // owner display name (shown on Home)
 };

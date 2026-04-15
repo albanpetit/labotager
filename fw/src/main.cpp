@@ -58,7 +58,9 @@ void setup() {
   settings.led_end_hour       = DEFAULT_LED_END_HOUR;
   settings.led_end_min        = DEFAULT_LED_END_MIN;
   settings.log_interval_s     = DEFAULT_LOG_INTERVAL_S;
-  settings.growth_days        = DEFAULT_GROWTH_DAYS;
+  settings.grow_start_day     = 0;
+  settings.grow_start_month   = 0;
+  settings.grow_start_year    = 0;
   strncpy(settings.owner_name, DEFAULT_OWNER_NAME, sizeof(settings.owner_name) - 1);
 
   Serial.begin(SERIAL_BAUD);
@@ -105,6 +107,15 @@ void loop() {
 
   set_stage(1); sensors_update(data);
   set_stage(2); rtc_update(data);
+
+  // Premier démarrage : enregistre la date du jour comme date de début de pousse.
+  if (settings.grow_start_day == 0 && data.rtc_ready) {
+    settings.grow_start_day   = data.day;
+    settings.grow_start_month = data.month;
+    settings.grow_start_year  = data.year;
+    logger_save_settings(settings);
+  }
+
   set_stage(3); pump_update(data, settings);
   set_stage(4); lighting_update(data, settings);
   set_stage(5); logger_update(data, settings);
