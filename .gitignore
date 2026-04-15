@@ -125,3 +125,4 @@ $RECYCLE.BIN/
 # Sublime Text
 *.sublime-workspace
 .history/
+media/
