@@ -22,8 +22,20 @@ void rtc_init() {
 
   if (rtc.lostPower()) {
     if (Serial) Serial.println("[RTC] Oscillator was stopped (OSF flag set) — restoring time from build timestamp");
-    rtc.dateTime();
-    rtc.adjust();
+
+    // Parse __DATE__ ("Mmm DD YYYY") and __TIME__ ("HH:MM:SS") at compile time.
+    // Using our own rtc_set_datetime() is explicit and reliable unlike rtc.adjust().
+    const char *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    uint8_t mon = 1;
+    for (uint8_t i = 0; i < 12; i++) {
+      if (strncmp(__DATE__, months + i * 3, 3) == 0) { mon = i + 1; break; }
+    }
+    uint8_t  d   = (uint8_t)atoi(__DATE__ + 4);
+    uint16_t y   = (uint16_t)atoi(__DATE__ + 7);
+    uint8_t  h   = (uint8_t)atoi(__TIME__);
+    uint8_t  mi  = (uint8_t)atoi(__TIME__ + 3);
+    uint8_t  sec = (uint8_t)atoi(__TIME__ + 6);
+    rtc_set_datetime(y, mon, d, h, mi, sec);
   }
 }
 

@@ -74,10 +74,17 @@ void encoder_init() {
 
 EncEvent encoder_poll() {
   // ── Rotation — read timer-callback accumulator atomically ─────────────────
+  // Snapshot and reset in one critical section so no transitions are lost
+  // between the read and the subtraction.
   __disable_irq();
   int accum = enc_accum;
-  if      (accum >=  4) { enc_accum -= 4; __enable_irq(); return ENC_DOWN; }
-  else if (accum <= -4) { enc_accum += 4; __enable_irq(); return ENC_UP;   }
+  enc_accum = 0;
+  __enable_irq();
+  if      (accum >=  4) return ENC_DOWN;
+  else if (accum <= -4) return ENC_UP;
+  // Sub-detent move: restore remaining accumulator (keeps partial counts)
+  __disable_irq();
+  enc_accum += accum;
   __enable_irq();
 
   // ── Switch ────────────────────────────────────────────────────────────────

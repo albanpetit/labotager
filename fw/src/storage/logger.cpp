@@ -58,6 +58,10 @@ static void load_config(Settings &s) {
     else if (strcmp(key, "owner_name")        == 0) {
       strncpy(s.owner_name, eq + 1, sizeof(s.owner_name) - 1);
       s.owner_name[sizeof(s.owner_name) - 1] = '\0';
+      // Strip trailing CR/LF that may remain after the line read
+      int olen = strlen(s.owner_name);
+      while (olen > 0 && (s.owner_name[olen-1] == '\r' || s.owner_name[olen-1] == '\n'))
+        s.owner_name[--olen] = '\0';
     }
   }
   f.close();

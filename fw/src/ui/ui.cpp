@@ -39,6 +39,13 @@
 
 static TFT_eSPI    *_tft       = nullptr;
 static TFT_eSprite *_spr       = nullptr;   // non-null during sprite decode
+
+// Home widget sprites — allocated once in ui_init(), reused each frame.
+// createSprite()/deleteSprite() on every draw() fragments the mbed heap;
+// pointer allocation avoids fragmentation over long runtimes.
+static TFT_eSprite *_spr_date = nullptr;
+static TFT_eSprite *_spr_time = nullptr;
+static TFT_eSprite *_spr_grow = nullptr;
 static PNG          _png;
 static int16_t      _png_x, _png_y;
 static bool         _png_opaque = false;
@@ -105,6 +112,21 @@ static void ui_png_to_sprite(TFT_eSprite &spr, const uint8_t *data, size_t len) 
 
 void ui_init(TFT_eSPI &tft) {
   _tft = &tft;
+
+  // Create home widget sprites once — 92×29 px each.
+  // Pixel buffers stay allocated for the whole session; only fill+push
+  // happens on each draw call, avoiding repeated heap alloc/free.
+  _spr_date = new TFT_eSprite(_tft);
+  _spr_date->createSprite(92, 29);
+  _spr_date->setSwapBytes(false);
+
+  _spr_time = new TFT_eSprite(_tft);
+  _spr_time->createSprite(92, 29);
+  _spr_time->setSwapBytes(false);
+
+  _spr_grow = new TFT_eSprite(_tft);
+  _spr_grow->createSprite(92, 29);
+  _spr_grow->setSwapBytes(false);
 }
 
 void ui_draw_png(const uint8_t *data, size_t len, int16_t x, int16_t y, bool opaque) {
@@ -158,48 +180,36 @@ void ui_draw_icon_error() {
 }
 
 void ui_draw_home_date(const char *date) {
-  TFT_eSprite spr(_tft);
-  spr.createSprite(92, 29);
-  spr.setSwapBytes(false);
-  spr.fillSprite(SPRITE_KEY);
-  ui_png_to_sprite(spr, home_date, sizeof(home_date));
-  spr.setFreeFont(UI_FONT);
-  spr.setTextColor(UI_COLOR_TEXT);
-  spr.setTextDatum(MC_DATUM);
-  spr.setTextSize(UI_FONT_SIZE);
-  spr.drawString(date, 53, 11);
-  spr.pushSprite(17, 29, SPRITE_KEY);
-  spr.deleteSprite();
+  _spr_date->fillSprite(SPRITE_KEY);
+  ui_png_to_sprite(*_spr_date, home_date, sizeof(home_date));
+  _spr_date->setFreeFont(UI_FONT);
+  _spr_date->setTextColor(UI_COLOR_TEXT);
+  _spr_date->setTextDatum(MC_DATUM);
+  _spr_date->setTextSize(UI_FONT_SIZE);
+  _spr_date->drawString(date, 53, 11);
+  _spr_date->pushSprite(17, 29, SPRITE_KEY);
 }
 
 void ui_draw_home_time(const char *time) {
-  TFT_eSprite spr(_tft);
-  spr.createSprite(92, 29);
-  spr.setSwapBytes(false);
-  spr.fillSprite(SPRITE_KEY);
-  ui_png_to_sprite(spr, home_time, sizeof(home_time));
-  spr.setFreeFont(UI_FONT);
-  spr.setTextColor(UI_COLOR_TEXT);
-  spr.setTextDatum(MC_DATUM);
-  spr.setTextSize(UI_FONT_SIZE);
-  spr.drawString(time, 53, 11);
-  spr.pushSprite(17, 59, SPRITE_KEY);
-  spr.deleteSprite();
+  _spr_time->fillSprite(SPRITE_KEY);
+  ui_png_to_sprite(*_spr_time, home_time, sizeof(home_time));
+  _spr_time->setFreeFont(UI_FONT);
+  _spr_time->setTextColor(UI_COLOR_TEXT);
+  _spr_time->setTextDatum(MC_DATUM);
+  _spr_time->setTextSize(UI_FONT_SIZE);
+  _spr_time->drawString(time, 53, 11);
+  _spr_time->pushSprite(17, 59, SPRITE_KEY);
 }
 
 void ui_draw_home_grow_counter(const char *days) {
-  TFT_eSprite spr(_tft);
-  spr.createSprite(92, 29);
-  spr.setSwapBytes(false);
-  spr.fillSprite(SPRITE_KEY);
-  ui_png_to_sprite(spr, home_grow_counter, sizeof(home_grow_counter));
-  spr.setFreeFont(UI_FONT);
-  spr.setTextColor(UI_COLOR_TEXT);
-  spr.setTextDatum(MC_DATUM);
-  spr.setTextSize(UI_FONT_SIZE);
-  spr.drawString(days, 53, 11);
-  spr.pushSprite(18, 89, SPRITE_KEY);
-  spr.deleteSprite();
+  _spr_grow->fillSprite(SPRITE_KEY);
+  ui_png_to_sprite(*_spr_grow, home_grow_counter, sizeof(home_grow_counter));
+  _spr_grow->setFreeFont(UI_FONT);
+  _spr_grow->setTextColor(UI_COLOR_TEXT);
+  _spr_grow->setTextDatum(MC_DATUM);
+  _spr_grow->setTextSize(UI_FONT_SIZE);
+  _spr_grow->drawString(days, 53, 11);
+  _spr_grow->pushSprite(18, 89, SPRITE_KEY);
 }
 
 void ui_draw_home_owner(const char *owner_name) {
