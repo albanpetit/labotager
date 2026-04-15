@@ -116,10 +116,18 @@ static void apply_delta(int i, int delta, Settings &s) {
       if (param_edit_sub == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
       else                     s.led_start_min  = (uint8_t)constrain((int)s.led_start_min  + delta, 0, 59);
       settings_dirty = true; break;
-    case 4:  // Fin eclairage combinée
+    case 4: {  // Fin eclairage combinée — ne peut pas être égale au début
       if (param_edit_sub == 0) s.led_end_hour = (uint8_t)constrain((int)s.led_end_hour + delta, 0, 23);
       else                     s.led_end_min  = (uint8_t)constrain((int)s.led_end_min  + delta, 0, 59);
+      // Si start == end, sauter d'une minute supplémentaire dans la même direction
+      if (s.led_end_hour == s.led_start_hour && s.led_end_min == s.led_start_min) {
+        uint16_t end_min = (uint16_t)s.led_end_hour * 60 + s.led_end_min;
+        end_min = (uint16_t)((end_min + delta + 1440) % 1440);
+        s.led_end_hour = (uint8_t)(end_min / 60);
+        s.led_end_min  = (uint8_t)(end_min % 60);
+      }
       settings_dirty = true; break;
+    }
     case 5:
       s.soil_threshold = (uint8_t)constrain((int)s.soil_threshold + delta, 0, 100);
       settings_dirty = true; break;
