@@ -88,7 +88,7 @@ bool logger_init(Settings &settings) {
 // USB CDC Serial.println() blocks indefinitely when the host disconnects —
 // even with an if(Serial) guard (race condition). SD state is visible via
 // data.sd_error (shown on the display error screen).
-void logger_update(SensorData &data, const Settings &settings) {
+void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)()) {
   static uint32_t last_retry  = 0;
   static uint32_t last_health = 0;
 
@@ -127,6 +127,10 @@ void logger_update(SensorData &data, const Settings &settings) {
   if (now - data.last_log_millis < (uint32_t)settings.log_interval_s * 1000UL) return;
   data.last_log_millis = now;
 
+  // Kick the watchdog before the SD write — a slow card can block for ~1-2 s
+  // which, combined with other loop work, risks approaching the 8 s timeout.
+  if (kick_wdt) kick_wdt();
+
   File32 f = sd.open(LOG_FILE, O_WRONLY | O_APPEND);
   if (!f) {
     sd_ready      = false;
@@ -155,7 +159,7 @@ void logger_update(SensorData &data, const Settings &settings) {
   data.has_last_save   = true;
 }
 
-void logger_save_settings(const Settings &s) {
+void logger_save_settings(const Settings &s, void (*kick_wdt)()) {
   if (!sd_ready) {
     if (Serial) Serial.println("[SD] Cannot save settings — card not available");
     return;
@@ -165,6 +169,8 @@ void logger_save_settings(const Settings &s) {
   // before the new content is fully on disk.  A reset mid-write leaves the
   // old file intact; only after a successful close do we replace it.
   static const char *TMP_FILE = "/config.tmp";
+
+  if (kick_wdt) kick_wdt();
 
   File32 f = sd.open(TMP_FILE, O_WRONLY | O_CREAT | O_TRUNC);
   if (!f) {

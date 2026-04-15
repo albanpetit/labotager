@@ -68,7 +68,8 @@ void ui_draw_details_item(int16_t y);
 void ui_draw_details_item_selected(int16_t y);
 
 void ui_draw_params_background();
-void ui_draw_params_title();
+// dirty=true adds a '*' suffix to signal unsaved RTC changes
+void ui_draw_params_title(bool dirty = false);
 
 // Params list items — y is the vertical position of the item row
 void ui_draw_params_item(int16_t y);

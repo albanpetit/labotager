@@ -272,12 +272,12 @@ void ui_draw_params_background() {
                   (uint16_t *)params_background, (uint8_t *)params_background_mask);
 }
 
-void ui_draw_params_title() {
+void ui_draw_params_title(bool dirty) {
   _tft->setFreeFont(UI_FONT);
   _tft->setTextColor(TFT_WHITE);
   _tft->setTextDatum(MC_DATUM);
   _tft->setTextSize(UI_FONT_SIZE);
-  _tft->drawString("Parametres", 160, 45);
+  _tft->drawString(dirty ? "Parametres *" : "Parametres", 160, 45);
 }
 
 void ui_draw_params_item(int16_t y) {

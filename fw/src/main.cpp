@@ -101,6 +101,8 @@ void setup() {
   }
 }
 
+static void wdt_kick() { mbed::Watchdog::get_instance().kick(); }
+
 void loop() {
   // Keep the watchdog alive — must be called at least every WATCHDOG_MS ms.
   mbed::Watchdog::get_instance().kick();
@@ -113,12 +115,12 @@ void loop() {
     settings.grow_start_day   = data.day;
     settings.grow_start_month = data.month;
     settings.grow_start_year  = data.year;
-    logger_save_settings(settings);
+    logger_save_settings(settings, wdt_kick);
   }
 
   set_stage(3); pump_update(data, settings);
   set_stage(4); lighting_update(data, settings);
-  set_stage(5); logger_update(data, settings);
+  set_stage(5); logger_update(data, settings, wdt_kick);
   set_stage(6); {
     // Process the first encoder event (or ENC_NONE for periodic refresh).
     // Then drain any events that accumulated in the ISR queue during the render
@@ -128,7 +130,7 @@ void loop() {
     while ((ev = encoder_poll()) != ENC_NONE) {
       changed |= display_update(data, settings, ev);
     }
-    if (changed) logger_save_settings(settings);
+    if (changed) logger_save_settings(settings, wdt_kick);
   }
   set_stage(0);   // loop completed cleanly
 }

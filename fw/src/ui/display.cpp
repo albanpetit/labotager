@@ -33,11 +33,14 @@ static bool    need_full_redraw = true;
 static uint32_t last_refresh_ms = 0;
 static bool    sd_error_shown    = false;
 
-// Startup hardware diagnostics — each error screen shown once, auto-dismissed
-// after DIAG_DURATION_MS or on any encoder press.
-static bool     diag_aht20_shown = false;
-static bool     diag_rtc_shown   = false;
-static uint32_t diag_until_ms    = 0;
+// Startup hardware diagnostics — shown each time an error appears (or reappears).
+// prev_* tracks the last known error state so the screen re-triggers if a sensor
+// is disconnected and reconnected after the initial boot sequence.
+static bool     diag_aht20_shown  = false;
+static bool     diag_rtc_shown    = false;
+static bool     prev_aht20_error  = false;
+static bool     prev_rtc_error    = false;
+static uint32_t diag_until_ms     = 0;
 static const uint32_t DIAG_DURATION_MS = 3000;
 
 // ─── Staged date/time (edited in Settings, applied to RTC on confirm) ─────────
@@ -65,58 +68,68 @@ static void init_staged(const SensorData &data) {
 // ENC_PRESS en mode édition cycle entre les sous-champs.
 // ENC_LONG_PRESS confirme et repasse en MODE_PARAM_SELECT.
 
-#define PARAM_COUNT 8
+enum ParamIndex {
+  PARAM_TIME        = 0,   // combiné HH:MM        (stg_hour, stg_min)
+  PARAM_DATE        = 1,   // combiné JJ/MM/AAAA   (stg_day, stg_month, stg_year)
+  PARAM_GROW_START  = 2,   // combiné JJ/MM/AAAA   (grow_start_day/month/year)
+  PARAM_LED_START   = 3,   // combiné HH:MM        (led_start_hour, led_start_min)
+  PARAM_LED_END     = 4,   // combiné HH:MM        (led_end_hour, led_end_min)
+  PARAM_SOIL        = 5,   // seuil humidité %
+  PARAM_TEMP_MIN    = 6,   // température min °C
+  PARAM_TEMP_MAX    = 7,   // température max °C
+  PARAM_COUNT       = 8,
+};
 
 static const char * const PARAM_LABELS[PARAM_COUNT] = {
-  "Heure",            // 0 — combiné : stg_hour:stg_min
-  "Date",             // 1 — combiné : stg_day/stg_month/stg_year
-  "Debut pousse",     // 2 — combiné : grow_start_day/month/year
-  "Debut eclairage",  // 3 — combiné : led_start_hour:led_start_min
-  "Fin eclairage",    // 4 — combiné : led_end_hour:led_end_min
-  "Seuil humidite %", // 5
-  "Temp min C",       // 6 — plant_temp_min
-  "Temp max C",       // 7 — plant_temp_max
+  "Heure",            // PARAM_TIME
+  "Date",             // PARAM_DATE
+  "Debut pousse",     // PARAM_GROW_START
+  "Debut eclairage",  // PARAM_LED_START
+  "Fin eclairage",    // PARAM_LED_END
+  "Seuil humidite %", // PARAM_SOIL
+  "Temp min C",       // PARAM_TEMP_MIN
+  "Temp max C",       // PARAM_TEMP_MAX
 };
 
 static int param_edit_sub = 0;  // sous-champ actif pour les lignes combinées
 
 // Nombre de sous-champs par ligne combinée (0 = non combiné)
 static int combined_sub_count(int i) {
-  if (i == 0 || i == 3 || i == 4) return 2;  // h, m
-  if (i == 1 || i == 2)           return 3;  // j, m, a
+  if (i == PARAM_TIME || i == PARAM_LED_START || i == PARAM_LED_END) return 2;  // h, m
+  if (i == PARAM_DATE || i == PARAM_GROW_START)                       return 3;  // j, m, a
   return 0;
 }
 
 static int get_param_val(int i, const Settings &s) {
   switch (i) {
-    case 5: return s.soil_threshold;
-    case 6: return s.plant_temp_min;
-    case 7: return s.plant_temp_max;
-    default: return 0;
+    case PARAM_SOIL:     return s.soil_threshold;
+    case PARAM_TEMP_MIN: return s.plant_temp_min;
+    case PARAM_TEMP_MAX: return s.plant_temp_max;
+    default:             return 0;
   }
 }
 
 static void apply_delta(int i, int delta, Settings &s) {
   switch (i) {
-    case 0:  // Heure combinée
+    case PARAM_TIME:  // Heure combinée
       if (param_edit_sub == 0) stg_hour = (uint8_t)constrain((int)stg_hour + delta, 0, 23);
       else                     stg_min  = (uint8_t)constrain((int)stg_min  + delta, 0, 59);
       stg_rtc_dirty = true; break;
-    case 1:  // Date combinée
+    case PARAM_DATE:  // Date combinée
       if      (param_edit_sub == 0) stg_day   = (uint8_t)constrain((int)stg_day   + delta, 1, 31);
       else if (param_edit_sub == 1) stg_month = (uint8_t)constrain((int)stg_month + delta, 1, 12);
       else                          stg_year  = (uint16_t)constrain((int)stg_year + delta, 2024, 2069);
       stg_rtc_dirty = true; break;
-    case 2:  // Debut pousse combiné
+    case PARAM_GROW_START:  // Debut pousse combiné
       if      (param_edit_sub == 0) s.grow_start_day   = (uint8_t)constrain((int)s.grow_start_day   + delta, 1, 31);
       else if (param_edit_sub == 1) s.grow_start_month = (uint8_t)constrain((int)s.grow_start_month + delta, 1, 12);
       else                          s.grow_start_year  = (uint16_t)constrain((int)s.grow_start_year  + delta, 2024, 2069);
       settings_dirty = true; break;
-    case 3:  // Debut eclairage combiné
+    case PARAM_LED_START:  // Debut eclairage combiné
       if (param_edit_sub == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
       else                     s.led_start_min  = (uint8_t)constrain((int)s.led_start_min  + delta, 0, 59);
       settings_dirty = true; break;
-    case 4: {  // Fin eclairage combinée — ne peut pas être égale au début
+    case PARAM_LED_END: {  // Fin eclairage combinée — ne peut pas être égale au début
       if (param_edit_sub == 0) s.led_end_hour = (uint8_t)constrain((int)s.led_end_hour + delta, 0, 23);
       else                     s.led_end_min  = (uint8_t)constrain((int)s.led_end_min  + delta, 0, 59);
       // Si start == end, sauter d'une minute supplémentaire dans la même direction
@@ -128,14 +141,14 @@ static void apply_delta(int i, int delta, Settings &s) {
       }
       settings_dirty = true; break;
     }
-    case 5:
-      s.soil_threshold = (uint8_t)constrain((int)s.soil_threshold + delta, 0, 100);
+    case PARAM_SOIL:
+      s.soil_threshold = (uint8_t)constrain(s.soil_threshold + delta, 0, 100);
       settings_dirty = true; break;
-    case 6:
-      s.plant_temp_min = (int8_t)constrain((int)s.plant_temp_min + delta, -40, 60);
+    case PARAM_TEMP_MIN:
+      s.plant_temp_min = (int8_t)constrain(s.plant_temp_min + delta, -40, 60);
       settings_dirty = true; break;
-    case 7:
-      s.plant_temp_max = (int8_t)constrain((int)s.plant_temp_max + delta, -40, 60);
+    case PARAM_TEMP_MAX:
+      s.plant_temp_max = (int8_t)constrain(s.plant_temp_max + delta, -40, 60);
       settings_dirty = true; break;
   }
 }
@@ -332,14 +345,14 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
   label[sizeof(label) - 1] = '\0';
 
   if (combined_sub_count(item_idx) > 0) {
-    if (item_idx == 1) {
+    if (item_idx == PARAM_DATE) {
       // Date courante : JJ/MM/AAAA
       snprintf(val, sizeof(val), "%02d/%02d/%04d", stg_day, stg_month, stg_year);
       if (editing) {
         const char *sub_names[] = { "j", "m", "a" };
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);
       }
-    } else if (item_idx == 2) {
+    } else if (item_idx == PARAM_GROW_START) {
       // Debut pousse : JJ/MM/AAAA
       snprintf(val, sizeof(val), "%02d/%02d/%04d", s.grow_start_day, s.grow_start_month, s.grow_start_year);
       if (editing) {
@@ -347,11 +360,11 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);
       }
     } else {
-      // Heure, Debut eclairage ou Fin eclairage : HH:MM
+      // PARAM_TIME, PARAM_LED_START, PARAM_LED_END : HH:MM
       int h, m;
-      if      (item_idx == 0) { h = stg_hour;          m = stg_min;          }
-      else if (item_idx == 3) { h = s.led_start_hour;  m = s.led_start_min;  }
-      else                    { h = s.led_end_hour;     m = s.led_end_min;    }
+      if      (item_idx == PARAM_TIME)      { h = stg_hour;          m = stg_min;          }
+      else if (item_idx == PARAM_LED_START) { h = s.led_start_hour;  m = s.led_start_min;  }
+      else                                  { h = s.led_end_hour;     m = s.led_end_min;    }
       snprintf(val, sizeof(val), "%02d:%02d", h, m);
       if (editing) {
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx],
@@ -377,7 +390,7 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
 static void render_params(const Settings &s) {
   ui_draw_background();
   ui_draw_params_background();
-  ui_draw_params_title();
+  ui_draw_params_title(stg_rtc_dirty);
 
   for (int slot = 0; slot < PARAMS_ITEMS_SHOWN; slot++) {
     int item = params_scroll + slot;
@@ -475,9 +488,14 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
     render_tabbar();
   }
 
-  // ── Startup hardware diagnostics (shown once, non-blocking) ─────────────
-  // AHT20 first, then RTC. Each screen holds for DIAG_DURATION_MS or until
-  // any encoder press.  After both checked, normal UI resumes.
+  // ── Hardware diagnostics — re-triggered each time an error (re)appears ───
+  // Reset the "shown" flag when the error clears so a reconnected sensor
+  // will produce a new diagnostic screen if it fails again.
+  if (prev_aht20_error && !data.aht20_error) diag_aht20_shown = false;
+  if (prev_rtc_error   && !data.rtc_error)   diag_rtc_shown   = false;
+  prev_aht20_error = data.aht20_error;
+  prev_rtc_error   = data.rtc_error;
+
   if (!diag_aht20_shown && data.aht20_error) {
     if (diag_until_ms == 0) {
       render_aht20_error();
