@@ -1,0 +1,127 @@
+# ============================================================
+#  ECAD — KiCad
+# ============================================================
+
+# Répertoires de sauvegarde automatique
+**/*-backups/
+**/*.kicad_pcb-bak
+**/*.kicad_sch-bak
+**/*.bak
+**/*.bck
+
+# Fichiers de verrouillage
+**/*.lck
+
+# Fichiers de travail temporaires
+fp-info-cache
+**/*.000
+**/*.001
+
+# Dossiers de fabrication (à versionner si souhaité)
+# gerbers/
+# fab/
+
+# Rapports DRC/ERC
+**/*.rpt
+
+# Netlist (générée à la demande)
+**/*.net
+
+# Fichiers de simulation
+**/*.cir
+**/*.raw
+
+
+# ============================================================
+#  FIRMWARE — PlatformIO
+# ============================================================
+
+# Dossier de build et cache PlatformIO
+.pio/
+
+# Environnements virtuels Python (utilisés par PlatformIO)
+.pioenvs/
+.piolibdeps/
+
+# Fichier de configuration local (chemins spécifiques à la machine)
+.vscode/
+*.code-workspace
+
+# Binaires compilés (régénérés par le build)
+**/*.elf
+**/*.bin
+**/*.hex
+**/*.map
+
+
+# ============================================================
+#  MCAD — FreeCAD / Fusion 360 / SolidWorks / KiCad StepUp
+# ============================================================
+
+# FreeCAD
+**/*.FCStd1          # sauvegardes automatiques FreeCAD
+**/*.FCBak
+FreeCAD_Model.log
+
+# Fichiers temporaires généraux MCAD
+**/*.autosave
+**/*_backup.*
+**/*~
+
+# Exports intermédiaires (régénérés depuis la source)
+# Décommenter si ces fichiers ne sont pas versionnés intentionnellement
+# **/*.step
+# **/*.stp
+# **/*.stl
+# **/*.dxf
+# **/*.svg
+
+# Dossiers de rendu / simulation
+renders/
+simulations/
+
+
+# ============================================================
+#  Système d'exploitation
+# ============================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+
+# ============================================================
+#  Éditeurs & IDE
+# ============================================================
+
+# VS Code (garder .vscode/extensions.json et .vscode/tasks.json si souhaité)
+.vscode/*
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# JetBrains
+.idea/
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+.history/

@@ -1,0 +1,58 @@
+#pragma once
+#include <stdint.h>
+
+// Sensor readings + RTC timestamp, updated every loop cycle
+struct SensorData {
+  // AHT20 air sensor
+  float    air_temp;          // ambient temperature (°C)
+  float    air_humidity;      // ambient relative humidity (%RH)
+  bool     aht20_ready;       // true once the sensor is initialised and returning valid data
+
+  // Soil moisture (ADC)
+  int      soil_raw;          // raw ADC value (0–4095)
+  uint8_t  soil_pct;          // mapped soil moisture (0–100 %)
+
+  // RTC DS3231M
+  uint8_t  hour;
+  uint8_t  minute;
+  uint8_t  second;
+  uint8_t  day;
+  uint8_t  month;
+  uint16_t year;
+  bool     rtc_ready;         // true once the RTC is initialised and running
+
+  // Actuator states (mirrored here for the logger and display)
+  bool     pump_on;
+  bool     led_on;
+
+  // Hardware errors (set during init or after repeated failures)
+  bool     aht20_error;       // true when AHT20 is permanently disabled (max I2C failures)
+  bool     rtc_error;         // true when DS3231M failed to initialise
+
+  // Logger
+  uint32_t last_log_millis;   // millis() timestamp of the last CSV entry
+  bool     sd_error;          // true when the SD card is absent or inaccessible
+
+  // Last successful CSV save (displayed on Details screen)
+  uint8_t  last_save_hour;
+  uint8_t  last_save_min;
+  uint8_t  last_save_day;
+  uint8_t  last_save_month;
+  uint16_t last_save_year;
+  bool     has_last_save;
+};
+
+// User-configurable parameters (loaded from /config.txt, persisted to SD)
+struct Settings {
+  uint8_t  soil_threshold;        // pump trigger threshold, % (default 30)
+  uint16_t watering_check_s;      // seconds between pump re-checks (default 60)
+
+  uint8_t  led_start_hour;        // grow light on hour (default 8)
+  uint8_t  led_start_min;         // grow light on minute (default 0)
+  uint8_t  led_duration_hours;    // grow light duration in hours (default 16)
+
+  uint16_t log_interval_s;        // seconds between CSV entries (default 300)
+
+  uint16_t growth_days;           // elapsed grow-days counter (shown on Home)
+  char     owner_name[32];        // owner display name (shown on Home)
+};
