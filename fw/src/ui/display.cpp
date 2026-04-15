@@ -432,9 +432,12 @@ void display_init() {
   // tft.begin() may re-enable the backlight via TFT_eSPI — force it off again.
   digitalWrite(TFT_BL, LOW);
 
-  tft.fillScreen(TFT_BLACK);
+  // Configure rotation and pixel format BEFORE filling black.
+  // Calling setRotation() after fillScreen() resets the address window registers
+  // and causes a brief noise flash even with the backlight off.
   tft.setRotation(3);
   tft.setSwapBytes(false);
+  tft.fillScreen(TFT_BLACK);
 
   // 2. Screen is now clean (black) — safe to turn the backlight on.
   digitalWrite(TFT_BL, HIGH);
