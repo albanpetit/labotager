@@ -57,66 +57,64 @@ static void init_staged(const SensorData &data) {
 
 // ─── Editable parameters ──────────────────────────────────────────────────────
 //
-// Index 0-4 : date and time fields (staged → written to RTC on confirm)
-// Index 5-9 : Settings struct fields (written to /config.txt on exit)
+// Lignes combinées :
+//   Index 0 — Heure   : HH:MM  (sub 0=h, 1=m)
+//   Index 1 — Date    : JJ/MM/AAAA  (sub 0=j, 1=m, 2=a)
+//   Index 3 — Eclairage : HH:MM  (sub 0=h, 1=m)
+// ENC_PRESS en mode édition cycle entre les sous-champs.
+// ENC_LONG_PRESS confirme et repasse en MODE_PARAM_SELECT.
 
-#define PARAM_COUNT 8
+#define PARAM_COUNT 6
 
-// Indices 0 et 5 sont des lignes combinées HH:MM (heure + minute sur une seule ligne).
-// En mode édition, ENC_PRESS bascule entre le sous-champ heure (sub=0) et minute (sub=1).
 static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Heure",            // 0 — combiné : stg_hour:stg_min
-  "Jour",             // 1
-  "Mois",             // 2
-  "Annee",            // 3
-  "Jours croissance", // 4
-  "Debut eclairage",  // 5 — combiné : led_start_hour:led_start_min
-  "Duree eclairage h",// 6
-  "Seuil humidite %", // 7
+  "Date",             // 1 — combiné : stg_day/stg_month/stg_year
+  "Jours croissance", // 2
+  "Debut eclairage",  // 3 — combiné : led_start_hour:led_start_min
+  "Duree eclairage h",// 4
+  "Seuil humidite %", // 5
 };
 
-static int  param_edit_sub = 0;   // 0=heure actif, 1=minute actif (lignes combinées)
+static int param_edit_sub = 0;  // sous-champ actif pour les lignes combinées
 
-static bool is_combined_param(int i) { return i == 0 || i == 5; }
+// Nombre de sous-champs par ligne combinée (0 = non combiné)
+static int combined_sub_count(int i) {
+  if (i == 0 || i == 3) return 2;  // h, m
+  if (i == 1)           return 3;  // j, m, a
+  return 0;
+}
 
 static int get_param_val(int i, const Settings &s) {
   switch (i) {
-    case 1: return stg_day;
-    case 2: return stg_month;
-    case 3: return stg_year;
-    case 4: return s.growth_days;
-    case 6: return s.led_duration_hours;
-    case 7: return s.soil_threshold;
+    case 2: return s.growth_days;
+    case 4: return s.led_duration_hours;
+    case 5: return s.soil_threshold;
     default: return 0;
   }
 }
 
 static void apply_delta(int i, int delta, Settings &s) {
   switch (i) {
-    case 0:  // Heure combinée — sous-champ piloté par param_edit_sub
+    case 0:  // Heure combinée
       if (param_edit_sub == 0) stg_hour = (uint8_t)constrain((int)stg_hour + delta, 0, 23);
       else                     stg_min  = (uint8_t)constrain((int)stg_min  + delta, 0, 59);
       stg_rtc_dirty = true; break;
-    case 1:
-      stg_day   = (uint8_t)constrain((int)stg_day   + delta, 1, 31);
+    case 1:  // Date combinée
+      if      (param_edit_sub == 0) stg_day   = (uint8_t)constrain((int)stg_day   + delta, 1, 31);
+      else if (param_edit_sub == 1) stg_month = (uint8_t)constrain((int)stg_month + delta, 1, 12);
+      else                          stg_year  = (uint16_t)constrain((int)stg_year + delta, 2024, 2069);
       stg_rtc_dirty = true; break;
     case 2:
-      stg_month = (uint8_t)constrain((int)stg_month + delta, 1, 12);
-      stg_rtc_dirty = true; break;
-    case 3:
-      stg_year  = (uint16_t)constrain((int)stg_year + delta, 2024, 2069);
-      stg_rtc_dirty = true; break;
-    case 4:
       s.growth_days        = (uint16_t)constrain((int)s.growth_days        + delta, 0, 9999);
       settings_dirty = true; break;
-    case 5:  // Debut eclairage combiné — sous-champ piloté par param_edit_sub
+    case 3:  // Debut eclairage combiné
       if (param_edit_sub == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
       else                     s.led_start_min  = (uint8_t)constrain((int)s.led_start_min  + delta, 0, 59);
       settings_dirty = true; break;
-    case 6:
+    case 4:
       s.led_duration_hours = (uint8_t)constrain((int)s.led_duration_hours + delta, 1, 24);
       settings_dirty = true; break;
-    case 7:
+    case 5:
       s.soil_threshold     = (uint8_t)constrain((int)s.soil_threshold     + delta, 0, 100);
       settings_dirty = true; break;
   }
@@ -296,19 +294,27 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
   strncpy(label, PARAM_LABELS[item_idx], sizeof(label) - 1);
   label[sizeof(label) - 1] = '\0';
 
-  if (is_combined_param(item_idx)) {
-    int h = (item_idx == 0) ? stg_hour         : s.led_start_hour;
-    int m = (item_idx == 0) ? stg_min          : s.led_start_min;
-    snprintf(val, sizeof(val), "%02d:%02d", h, m);
-    if (editing) {
-      // Indique quel sous-champ est actif dans le label
-      snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx],
-               param_edit_sub == 0 ? "h" : "m");
+  if (combined_sub_count(item_idx) > 0) {
+    if (item_idx == 1) {
+      // Date : JJ/MM/AAAA
+      snprintf(val, sizeof(val), "%02d/%02d/%04d", stg_day, stg_month, stg_year);
+      if (editing) {
+        const char *sub_names[] = { "j", "m", "a" };
+        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);
+      }
+    } else {
+      // Heure ou Debut eclairage : HH:MM
+      int h = (item_idx == 0) ? stg_hour : s.led_start_hour;
+      int m = (item_idx == 0) ? stg_min  : s.led_start_min;
+      snprintf(val, sizeof(val), "%02d:%02d", h, m);
+      if (editing) {
+        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx],
+                 param_edit_sub == 0 ? "h" : "m");
+      }
     }
   } else {
     int v = get_param_val(item_idx, s);
-    if (item_idx == 3) snprintf(val, sizeof(val), "%04d", v);  // Annee
-    else               snprintf(val, sizeof(val), "%d", v);
+    snprintf(val, sizeof(val), "%d", v);
   }
 
   int ty = y + 13;
@@ -567,8 +573,8 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
         } else if (ev == ENC_DOWN) {
           apply_delta(param_cursor, -1, settings);
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
-        } else if (ev == ENC_PRESS && is_combined_param(param_cursor)) {
-          param_edit_sub = 1 - param_edit_sub;   // bascule h ↔ m
+        } else if (ev == ENC_PRESS && combined_sub_count(param_cursor) > 0) {
+          param_edit_sub = (param_edit_sub + 1) % combined_sub_count(param_cursor);
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
         } else if (ev == ENC_LONG_PRESS) {
           if (stg_rtc_dirty) {
