@@ -49,7 +49,8 @@ struct Settings {
 
   uint8_t  led_start_hour;        // grow light on hour (default 8)
   uint8_t  led_start_min;         // grow light on minute (default 0)
-  uint8_t  led_duration_hours;    // grow light duration in hours (default 16)
+  uint8_t  led_end_hour;          // grow light off hour (default 22)
+  uint8_t  led_end_min;           // grow light off minute (default 0)
 
   uint16_t log_interval_s;        // seconds between CSV entries (default 300)
 

@@ -15,16 +15,17 @@ void lighting_update(SensorData &data, const Settings &settings) {
   // Convert current time and schedule boundaries to minutes since midnight
   uint16_t now_min   = (uint16_t)data.hour * 60 + data.minute;
   uint16_t start_min = (uint16_t)settings.led_start_hour * 60 + settings.led_start_min;
-  uint16_t end_min   = start_min + (uint16_t)settings.led_duration_hours * 60;
+  uint16_t end_min   = (uint16_t)settings.led_end_hour   * 60 + settings.led_end_min;
 
   bool on;
-  if (end_min <= 1440) {
-    // Schedule fits within the same day
+  if (start_min == end_min) {
+    on = false;  // start == end → aucune plage définie
+  } else if (start_min < end_min) {
+    // Plage normale (ex. 08:00 → 22:00)
     on = (now_min >= start_min && now_min < end_min);
   } else {
-    // Schedule wraps past midnight (e.g. 20:00 + 16 h → ends at 12:00 next day)
-    uint16_t end_wrap = end_min - 1440;
-    on = (now_min >= start_min || now_min < end_wrap);
+    // Plage avec passage à minuit (ex. 22:00 → 06:00)
+    on = (now_min >= start_min || now_min < end_min);
   }
 
   if (on != data.led_on) {

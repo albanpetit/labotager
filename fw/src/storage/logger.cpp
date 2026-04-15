@@ -45,9 +45,10 @@ static void load_config(Settings &s) {
 
     if      (strcmp(key, "soil_threshold")    == 0) s.soil_threshold     = (uint8_t)val;
     else if (strcmp(key, "watering_check_s")  == 0) s.watering_check_s   = (uint16_t)val;
-    else if (strcmp(key, "led_start_hour")    == 0) s.led_start_hour     = (uint8_t)val;
-    else if (strcmp(key, "led_start_min")     == 0) s.led_start_min      = (uint8_t)val;
-    else if (strcmp(key, "led_duration_hours")== 0) s.led_duration_hours = (uint8_t)val;
+    else if (strcmp(key, "led_start_hour")    == 0) s.led_start_hour = (uint8_t)val;
+    else if (strcmp(key, "led_start_min")     == 0) s.led_start_min  = (uint8_t)val;
+    else if (strcmp(key, "led_end_hour")      == 0) s.led_end_hour   = (uint8_t)val;
+    else if (strcmp(key, "led_end_min")       == 0) s.led_end_min    = (uint8_t)val;
     else if (strcmp(key, "log_interval_s")    == 0) s.log_interval_s     = (uint16_t)val;
     else if (strcmp(key, "growth_days")       == 0) s.growth_days        = (uint16_t)val;
     else if (strcmp(key, "owner_name")        == 0) {
@@ -165,9 +166,10 @@ void logger_save_settings(const Settings &s) {
 
   f.print("soil_threshold=");     f.println(s.soil_threshold);
   f.print("watering_check_s=");   f.println(s.watering_check_s);
-  f.print("led_start_hour=");     f.println(s.led_start_hour);
-  f.print("led_start_min=");      f.println(s.led_start_min);
-  f.print("led_duration_hours="); f.println(s.led_duration_hours);
+  f.print("led_start_hour="); f.println(s.led_start_hour);
+  f.print("led_start_min=");  f.println(s.led_start_min);
+  f.print("led_end_hour=");   f.println(s.led_end_hour);
+  f.print("led_end_min=");    f.println(s.led_end_min);
   f.print("log_interval_s=");     f.println(s.log_interval_s);
   f.print("growth_days=");        f.println(s.growth_days);
   f.print("owner_name=");         f.println(s.owner_name);

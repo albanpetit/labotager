@@ -58,9 +58,10 @@ static void init_staged(const SensorData &data) {
 // ─── Editable parameters ──────────────────────────────────────────────────────
 //
 // Lignes combinées :
-//   Index 0 — Heure   : HH:MM  (sub 0=h, 1=m)
-//   Index 1 — Date    : JJ/MM/AAAA  (sub 0=j, 1=m, 2=a)
-//   Index 3 — Eclairage : HH:MM  (sub 0=h, 1=m)
+//   Index 0 — Heure          : HH:MM       (sub 0=h, 1=m)
+//   Index 1 — Date           : JJ/MM/AAAA  (sub 0=j, 1=m, 2=a)
+//   Index 3 — Debut eclairage: HH:MM       (sub 0=h, 1=m)
+//   Index 4 — Fin eclairage  : HH:MM       (sub 0=h, 1=m)
 // ENC_PRESS en mode édition cycle entre les sous-champs.
 // ENC_LONG_PRESS confirme et repasse en MODE_PARAM_SELECT.
 
@@ -71,7 +72,7 @@ static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Date",             // 1 — combiné : stg_day/stg_month/stg_year
   "Jours croissance", // 2
   "Debut eclairage",  // 3 — combiné : led_start_hour:led_start_min
-  "Duree eclairage h",// 4
+  "Fin eclairage",    // 4 — combiné : led_end_hour:led_end_min
   "Seuil humidite %", // 5
 };
 
@@ -79,15 +80,14 @@ static int param_edit_sub = 0;  // sous-champ actif pour les lignes combinées
 
 // Nombre de sous-champs par ligne combinée (0 = non combiné)
 static int combined_sub_count(int i) {
-  if (i == 0 || i == 3) return 2;  // h, m
-  if (i == 1)           return 3;  // j, m, a
+  if (i == 0 || i == 3 || i == 4) return 2;  // h, m
+  if (i == 1)                      return 3;  // j, m, a
   return 0;
 }
 
 static int get_param_val(int i, const Settings &s) {
   switch (i) {
     case 2: return s.growth_days;
-    case 4: return s.led_duration_hours;
     case 5: return s.soil_threshold;
     default: return 0;
   }
@@ -111,11 +111,12 @@ static void apply_delta(int i, int delta, Settings &s) {
       if (param_edit_sub == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
       else                     s.led_start_min  = (uint8_t)constrain((int)s.led_start_min  + delta, 0, 59);
       settings_dirty = true; break;
-    case 4:
-      s.led_duration_hours = (uint8_t)constrain((int)s.led_duration_hours + delta, 1, 24);
+    case 4:  // Fin eclairage combinée
+      if (param_edit_sub == 0) s.led_end_hour = (uint8_t)constrain((int)s.led_end_hour + delta, 0, 23);
+      else                     s.led_end_min  = (uint8_t)constrain((int)s.led_end_min  + delta, 0, 59);
       settings_dirty = true; break;
     case 5:
-      s.soil_threshold     = (uint8_t)constrain((int)s.soil_threshold     + delta, 0, 100);
+      s.soil_threshold = (uint8_t)constrain((int)s.soil_threshold + delta, 0, 100);
       settings_dirty = true; break;
   }
 }
@@ -303,9 +304,11 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);
       }
     } else {
-      // Heure ou Debut eclairage : HH:MM
-      int h = (item_idx == 0) ? stg_hour : s.led_start_hour;
-      int m = (item_idx == 0) ? stg_min  : s.led_start_min;
+      // Heure, Debut eclairage ou Fin eclairage : HH:MM
+      int h, m;
+      if      (item_idx == 0) { h = stg_hour;          m = stg_min;          }
+      else if (item_idx == 3) { h = s.led_start_hour;  m = s.led_start_min;  }
+      else                    { h = s.led_end_hour;     m = s.led_end_min;    }
       snprintf(val, sizeof(val), "%02d:%02d", h, m);
       if (editing) {
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx],

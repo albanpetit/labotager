@@ -53,7 +53,8 @@ void setup() {
   settings.watering_check_s   = DEFAULT_WATERING_CHECK_S;
   settings.led_start_hour     = DEFAULT_LED_START_HOUR;
   settings.led_start_min      = DEFAULT_LED_START_MIN;
-  settings.led_duration_hours = DEFAULT_LED_DURATION_H;
+  settings.led_end_hour       = DEFAULT_LED_END_HOUR;
+  settings.led_end_min        = DEFAULT_LED_END_MIN;
   settings.log_interval_s     = DEFAULT_LOG_INTERVAL_S;
   settings.growth_days        = DEFAULT_GROWTH_DAYS;
   strncpy(settings.owner_name, DEFAULT_OWNER_NAME, sizeof(settings.owner_name) - 1);

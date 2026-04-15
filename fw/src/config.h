@@ -35,9 +35,10 @@
 // ─── Default parameter values ─────────────────────────────────────────────────
 #define DEFAULT_SOIL_THRESHOLD     5    // soil moisture threshold to trigger pump (%)
 #define DEFAULT_WATERING_CHECK_S   10   // seconds between pump re-checks
-#define DEFAULT_LED_START_HOUR      8   // grow light on time (08:00)
-#define DEFAULT_LED_START_MIN       0   // grow light on minute
-#define DEFAULT_LED_DURATION_H     16   // grow light duration (hours)
+#define DEFAULT_LED_START_HOUR      8   // grow light on  (08:00)
+#define DEFAULT_LED_START_MIN       0
+#define DEFAULT_LED_END_HOUR       22   // grow light off (22:00)
+#define DEFAULT_LED_END_MIN         0
 #define DEFAULT_LOG_INTERVAL_S    3600  // seconds between CSV log entries
 #define DEFAULT_GROWTH_DAYS         0   // elapsed grow-days counter
 #define DEFAULT_OWNER_NAME    "La Machinerie"
