@@ -50,6 +50,8 @@ void setup() {
 
   // 2. Apply compile-time defaults (overridden by /config.txt if SD is present)
   settings.soil_threshold     = DEFAULT_SOIL_THRESHOLD;
+  settings.plant_temp_min     = DEFAULT_PLANT_TEMP_MIN;
+  settings.plant_temp_max     = DEFAULT_PLANT_TEMP_MAX;
   settings.watering_check_s   = DEFAULT_WATERING_CHECK_S;
   settings.led_start_hour     = DEFAULT_LED_START_HOUR;
   settings.led_start_min      = DEFAULT_LED_START_MIN;

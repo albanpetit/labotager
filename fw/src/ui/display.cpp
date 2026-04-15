@@ -65,7 +65,7 @@ static void init_staged(const SensorData &data) {
 // ENC_PRESS en mode édition cycle entre les sous-champs.
 // ENC_LONG_PRESS confirme et repasse en MODE_PARAM_SELECT.
 
-#define PARAM_COUNT 6
+#define PARAM_COUNT 8
 
 static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Heure",            // 0 — combiné : stg_hour:stg_min
@@ -74,6 +74,8 @@ static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Debut eclairage",  // 3 — combiné : led_start_hour:led_start_min
   "Fin eclairage",    // 4 — combiné : led_end_hour:led_end_min
   "Seuil humidite %", // 5
+  "Temp min C",       // 6 — plant_temp_min
+  "Temp max C",       // 7 — plant_temp_max
 };
 
 static int param_edit_sub = 0;  // sous-champ actif pour les lignes combinées
@@ -89,6 +91,8 @@ static int get_param_val(int i, const Settings &s) {
   switch (i) {
     case 2: return s.growth_days;
     case 5: return s.soil_threshold;
+    case 6: return s.plant_temp_min;
+    case 7: return s.plant_temp_max;
     default: return 0;
   }
 }
@@ -117,6 +121,12 @@ static void apply_delta(int i, int delta, Settings &s) {
       settings_dirty = true; break;
     case 5:
       s.soil_threshold = (uint8_t)constrain((int)s.soil_threshold + delta, 0, 100);
+      settings_dirty = true; break;
+    case 6:
+      s.plant_temp_min = (int8_t)constrain((int)s.plant_temp_min + delta, -40, 60);
+      settings_dirty = true; break;
+    case 7:
+      s.plant_temp_max = (int8_t)constrain((int)s.plant_temp_max + delta, -40, 60);
       settings_dirty = true; break;
   }
 }
@@ -154,8 +164,8 @@ static void render_tabbar() {
 static PlantState plant_get_state(const SensorData &data, const Settings &settings) {
   if (data.soil_pct < settings.soil_threshold) return PLANT_THIRSTY;
   if (data.aht20_ready) {
-    if (data.air_temp > PLANT_TEMP_MAX_C) return PLANT_HOT;
-    if (data.air_temp < PLANT_TEMP_MIN_C) return PLANT_COLD;
+    if (data.air_temp > (float)settings.plant_temp_max) return PLANT_HOT;
+    if (data.air_temp < (float)settings.plant_temp_min) return PLANT_COLD;
   }
   return PLANT_HAPPY;
 }

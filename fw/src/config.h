@@ -43,11 +43,9 @@
 #define DEFAULT_GROWTH_DAYS         0   // elapsed grow-days counter
 #define DEFAULT_OWNER_NAME    "La Machinerie"
 
-// ─── Plant status thresholds ──────────────────────────────────────────────────
-// Used by plant_get_state() in display.cpp to pick the status illustration.
-// Soil-moisture threshold reuses settings.soil_threshold (configurable at runtime).
-#define PLANT_TEMP_MIN_C   15.0f   // below → PLANT_COLD  (°C)
-#define PLANT_TEMP_MAX_C   30.0f   // above → PLANT_HOT   (°C)
+// ─── Plant status thresholds (defaults — overridden at runtime via Settings) ──
+#define DEFAULT_PLANT_TEMP_MIN   15   // below → PLANT_COLD  (°C)
+#define DEFAULT_PLANT_TEMP_MAX   30   // above → PLANT_HOT   (°C)
 
 // ─── Screen layout (landscape 320×240) ────────────────────────────────────────
 #define TABBAR_Y      200   // Y origin of the tab bar

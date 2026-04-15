@@ -44,7 +44,9 @@ struct SensorData {
 
 // User-configurable parameters (loaded from /config.txt, persisted to SD)
 struct Settings {
-  uint8_t  soil_threshold;        // pump trigger threshold, % (default 30)
+  uint8_t  soil_threshold;        // pump trigger threshold, % (default 5)
+  int8_t   plant_temp_min;        // cold alert threshold (°C, default 15)
+  int8_t   plant_temp_max;        // heat alert threshold (°C, default 30)
   uint16_t watering_check_s;      // seconds between pump re-checks (default 60)
 
   uint8_t  led_start_hour;        // grow light on hour (default 8)
