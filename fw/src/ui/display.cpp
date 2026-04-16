@@ -443,30 +443,37 @@ static void render_rtc_error() {
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 
+// ST7789 DISPON command — sent after the frame buffer is filled black.
+// The DISPON inside ST7789_Init.h has been patched out so begin() never
+// enables the display; we control it here for a noise-free startup.
+#define ST7789_DISPON   0x29
+
 void display_init() {
-  // 1. Keep backlight OFF before the TFT controller is initialised.
-  //    tft.begin() might enable the backlight and expose the grey noise frame.
+  // 1. Backlight off for the entire init sequence.
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, LOW);
 
+  // 2. Init the TFT controller. The patched ST7789_Init.h no longer sends
+  //    DISPON or enables the backlight, so the panel stays dark.
   tft.begin();
-  // tft.begin() may re-enable the backlight via TFT_eSPI — force it off again.
-  digitalWrite(TFT_BL, LOW);
 
-  // Configure rotation and pixel format BEFORE filling black.
-  // Calling setRotation() after fillScreen() resets the address window registers
-  // and causes a brief noise flash even with the backlight off.
+  // 3. Configure rotation and pixel format, then fill the frame buffer black.
   tft.setRotation(3);
   tft.setSwapBytes(false);
   tft.fillScreen(TFT_BLACK);
 
-  // 2. Screen is now clean (black) — safe to turn the backlight on.
+  // 4. Enable panel output now that the frame buffer is clean black.
+  tft.startWrite();
+  tft.writecommand(ST7789_DISPON);
+  tft.endWrite();
+
+  // 5. Turn backlight on — panel already shows black, no noise flash.
   digitalWrite(TFT_BL, HIGH);
 
-  // 3. Hand the shared TFT instance to the UI rendering layer.
+  // 6. Hand the shared TFT instance to the UI rendering layer.
   ui_init(tft);
 
-  tft.setFreeFont(UI_FONT);   // built-in GLCD 6×8 px — override with setFreeFont(UI_FONT) per element
+  tft.setFreeFont(UI_FONT);
 }
 
 bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
