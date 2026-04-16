@@ -50,6 +50,14 @@ static uint16_t stg_year;
 static uint8_t  stg_month, stg_day, stg_hour, stg_min;
 static bool     stg_rtc_dirty = false;
 
+// Apply the staged date/time to the RTC if it was modified in Settings.
+// Called on LONG_PRESS to confirm edits before returning to the previous mode.
+static void commit_staged_rtc() {
+  if (!stg_rtc_dirty) return;
+  rtc_set_datetime(stg_year, stg_month, stg_day, stg_hour, stg_min, 0);
+  stg_rtc_dirty = false;
+}
+
 static void init_staged(const SensorData &data) {
   stg_year  = data.year;
   stg_month = data.month;
@@ -137,7 +145,7 @@ static void apply_delta(int i, int delta, Settings &s) {
       else                     s.led_end_min  = (uint8_t)constrain((int)s.led_end_min  + delta, 0, 59);
       // If start == end, nudge end one extra minute in the same direction
       if (s.led_end_hour == s.led_start_hour && s.led_end_min == s.led_start_min) {
-        uint16_t end_min = (uint16_t)s.led_end_hour * 60 + s.led_end_min;
+        uint16_t end_min = minutes_since_midnight(s.led_end_hour, s.led_end_min);
         end_min = (uint16_t)((end_min + delta + MINUTES_PER_DAY) % MINUTES_PER_DAY);
         s.led_end_hour = (uint8_t)(end_min / 60);
         s.led_end_min  = (uint8_t)(end_min % 60);
@@ -348,16 +356,12 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
   label[sizeof(label) - 1] = '\0';
 
   if (combined_sub_count(item_idx) > 0) {
-    if (item_idx == PARAM_DATE) {
-      // Staged date: DD/MM/YYYY
-      snprintf(val, sizeof(val), "%02d/%02d/%04d", stg_day, stg_month, stg_year);
-      if (editing) {
-        const char *sub_names[] = { "d", "m", "y" };
-        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub_idx]);
-      }
-    } else if (item_idx == PARAM_GROW_START) {
-      // Grow start date: DD/MM/YYYY
-      snprintf(val, sizeof(val), "%02d/%02d/%04d", s.grow_start_day, s.grow_start_month, s.grow_start_year);
+    if (item_idx == PARAM_DATE || item_idx == PARAM_GROW_START) {
+      // DD/MM/YYYY — source depends on which row we're rendering
+      uint8_t  d  = (item_idx == PARAM_DATE) ? stg_day          : s.grow_start_day;
+      uint8_t  mo = (item_idx == PARAM_DATE) ? stg_month        : s.grow_start_month;
+      uint16_t y  = (item_idx == PARAM_DATE) ? stg_year         : s.grow_start_year;
+      snprintf(val, sizeof(val), "%02d/%02d/%04d", d, mo, y);
       if (editing) {
         const char *sub_names[] = { "d", "m", "y" };
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub_idx]);
@@ -619,10 +623,7 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
           ui_mode = MODE_PARAM_EDIT;
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
         } else if (ev == ENC_LONG_PRESS) {
-          if (stg_rtc_dirty) {
-            rtc_set_datetime(stg_year, stg_month, stg_day, stg_hour, stg_min, 0);
-            stg_rtc_dirty = false;
-          }
+          commit_staged_rtc();
           ui_mode   = MODE_TAB;
           do_render = true;
         }
@@ -654,10 +655,7 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
           param_edit_sub_idx = (param_edit_sub_idx + 1) % combined_sub_count(param_cursor);
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
         } else if (ev == ENC_LONG_PRESS) {
-          if (stg_rtc_dirty) {
-            rtc_set_datetime(stg_year, stg_month, stg_day, stg_hour, stg_min, 0);
-            stg_rtc_dirty = false;
-          }
+          commit_staged_rtc();
           param_edit_sub_idx = 0;
           ui_mode = MODE_PARAM_SELECT;
           render_param_row(param_cursor, param_cursor - params_scroll, true, false, settings);

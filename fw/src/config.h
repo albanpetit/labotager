@@ -59,6 +59,10 @@
 // ─── Time ─────────────────────────────────────────────────────────────────────
 #define MINUTES_PER_DAY   1440   // 24 × 60 — wrapping modulus for time-of-day arithmetic
 
+static inline uint16_t minutes_since_midnight(uint8_t h, uint8_t m) {
+  return (uint16_t)h * 60u + m;
+}
+
 // ─── Encoder ──────────────────────────────────────────────────────────────────
 #define ENC_POLL_US        250   // quadrature polling period (µs) — 4 kHz
 #define ENC_SW_DEBOUNCE_MS  15   // switch debounce window (ms)

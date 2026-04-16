@@ -13,9 +13,9 @@ void lighting_update(SensorData &data, const Settings &settings) {
   if (!data.rtc_ready) return;
 
   // Convert current time and schedule boundaries to minutes since midnight
-  uint16_t now_min   = (uint16_t)data.hour * 60 + data.minute;
-  uint16_t start_min = (uint16_t)settings.led_start_hour * 60 + settings.led_start_min;
-  uint16_t end_min   = (uint16_t)settings.led_end_hour   * 60 + settings.led_end_min;
+  uint16_t now_min   = minutes_since_midnight(data.hour,              data.minute);
+  uint16_t start_min = minutes_since_midnight(settings.led_start_hour, settings.led_start_min);
+  uint16_t end_min   = minutes_since_midnight(settings.led_end_hour,   settings.led_end_min);
 
   bool on;
   if (start_min == end_min) {
