@@ -52,9 +52,6 @@ static void enc_poll_cb() {
 
 // ─── Switch — polling state machine ───────────────────────────────────────────
 
-#define SW_DEBOUNCE_MS  15
-#define SW_LONG_MS     500
-
 static uint8_t  sw_state   = 0;
 static uint32_t sw_ts      = 0;
 static uint32_t sw_press_t = 0;
@@ -65,8 +62,8 @@ void encoder_init() {
   pinMode(GPIO_ENC_A, INPUT_PULLUP);
   pinMode(GPIO_ENC_B, INPUT_PULLUP);
 
-  // Start the 4 kHz polling timer via mbed Ticker (250 µs period).
-  enc_ticker.attach_us(enc_poll_cb, 250);
+  // Start the quadrature polling timer via mbed Ticker.
+  enc_ticker.attach_us(enc_poll_cb, ENC_POLL_US);
 
   // Switch — Arduino polling, no ISR needed
   pinMode(GPIO_ENC_SW, INPUT_PULLUP);
@@ -98,17 +95,17 @@ EncEvent encoder_poll() {
 
     case 1:   // press debounce
       if (!pressed) { sw_state = 0; break; }
-      if (now - sw_ts >= SW_DEBOUNCE_MS) { sw_state = 2; sw_press_t = now; }
+      if (now - sw_ts >= ENC_SW_DEBOUNCE_MS) { sw_state = 2; sw_press_t = now; }
       break;
 
     case 2:   // held — wait for release or long-press timeout
       if (!pressed) { sw_state = 3; sw_ts = now; break; }
-      if (now - sw_press_t >= SW_LONG_MS) { sw_state = 4; return ENC_LONG_PRESS; }
+      if (now - sw_press_t >= ENC_SW_LONG_MS) { sw_state = 4; return ENC_LONG_PRESS; }
       break;
 
     case 3:   // release debounce
       if (pressed) { sw_state = 2; break; }
-      if (now - sw_ts >= SW_DEBOUNCE_MS) { sw_state = 0; return ENC_PRESS; }
+      if (now - sw_ts >= ENC_SW_DEBOUNCE_MS) { sw_state = 0; return ENC_PRESS; }
       break;
 
     case 4:   // long-press already emitted — wait for physical release

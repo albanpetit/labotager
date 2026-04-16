@@ -17,7 +17,29 @@ extern MbedI2C rtcWire;
 //   After AHT20_MAX_FAILURES failures, I2C communication with AHT20 is
 //   permanently disabled for this boot — the DS3231M continues unaffected.
 
-#define AHT20_MAX_FAILURES  3
+#define AHT20_MAX_FAILURES      3
+
+// AHT20 I2C command bytes (datasheet section 5.4)
+#define AHT20_CMD_INIT          0xBE   // initialisation / calibration command
+#define AHT20_CMD_INIT_P1       0x08   // parameter 1: enable calibration
+#define AHT20_CMD_INIT_P2       0x00   // parameter 2: reserved
+#define AHT20_CMD_TRIGGER       0xAC   // start measurement command
+#define AHT20_CMD_TRIGGER_P1    0x33   // parameter 1: fixed per datasheet
+#define AHT20_CMD_TRIGGER_P2    0x00   // parameter 2: reserved
+#define AHT20_STATUS_CAL_BIT    0x08   // bit 3 of status byte: calibration done
+#define AHT20_STATUS_BUSY_BIT   0x80   // bit 7 of status byte: measurement in progress
+
+// AHT20 measurement timing (datasheet section 5.4)
+#define AHT20_CYCLE_MS          2000   // minimum interval between measurement cycles (ms)
+#define AHT20_CONV_MS           80     // conversion time after trigger (ms)
+
+// AHT20 raw-to-physical conversion (datasheet section 6.1)
+// Both humidity and temperature use 20-bit unsigned values (range 0..2^20-1).
+//   Humidity (%RH) = raw_hum  * 100 / 2^20
+//   Temp     (°C)  = raw_temp * 200 / 2^20 - 50
+#define AHT20_RAW_MAX           1048576.0f   // 2^20
+#define AHT20_TEMP_RANGE_C      200.0f       // full-scale temperature span (°C)
+#define AHT20_TEMP_OFFSET_C     50.0f        // offset subtracted after scaling
 
 enum AhtState { AHT_IDLE, AHT_TRIGGERED };
 
@@ -37,19 +59,19 @@ static bool aht20_detect_and_init() {
   int raw = rtcWire.read();
   uint8_t status = (raw >= 0) ? (uint8_t)raw : 0x00;
 
-  // Calibrate if needed (bit 3 = CAL flag)
-  if (!(status & 0x08)) {
+  // Calibrate if needed (CAL bit not set in status)
+  if (!(status & AHT20_STATUS_CAL_BIT)) {
     rtcWire.beginTransmission(AHT20_ADDR);
-    rtcWire.write(0xBE);
-    rtcWire.write(0x08);
-    rtcWire.write(0x00);
+    rtcWire.write(AHT20_CMD_INIT);
+    rtcWire.write(AHT20_CMD_INIT_P1);
+    rtcWire.write(AHT20_CMD_INIT_P2);
     rtcWire.endTransmission();
     delay(10);
 
     rtcWire.requestFrom((uint8_t)AHT20_ADDR, (uint8_t)1);
     raw    = rtcWire.read();
     status = (raw >= 0) ? (uint8_t)raw : 0x00;
-    if (!(status & 0x08)) return false;   // calibration failed
+    if (!(status & AHT20_STATUS_CAL_BIT)) return false;   // calibration failed
   }
   return true;
 }
@@ -98,12 +120,12 @@ void sensors_update(SensorData &data) {
   if (aht_disabled) return;
 
   if (aht_state == AHT_IDLE) {
-    if (now - aht_last_cycle >= 2000) {
+    if (now - aht_last_cycle >= AHT20_CYCLE_MS) {
       // Send measurement trigger command
       rtcWire.beginTransmission(AHT20_ADDR);
-      rtcWire.write(0xAC);
-      rtcWire.write(0x33);
-      rtcWire.write(0x00);
+      rtcWire.write(AHT20_CMD_TRIGGER);
+      rtcWire.write(AHT20_CMD_TRIGGER_P1);
+      rtcWire.write(AHT20_CMD_TRIGGER_P2);
       uint8_t err = (uint8_t)rtcWire.endTransmission();
       if (err == 0) {
         aht_trigger_ms = now;
@@ -115,8 +137,8 @@ void sensors_update(SensorData &data) {
       }
     }
   } else {
-    // Wait 80 ms for conversion, then read result
-    if (now - aht_trigger_ms >= 80) {
+    // Wait for conversion to complete
+    if (now - aht_trigger_ms >= AHT20_CONV_MS) {
       aht_state      = AHT_IDLE;
       aht_last_cycle = now;
 
@@ -132,7 +154,7 @@ void sensors_update(SensorData &data) {
         aht_record_failure(data);
         return;
       }
-      if (d[0] & 0x80) return;   // sensor still busy — skip this reading (not a failure)
+      if (d[0] & AHT20_STATUS_BUSY_BIT) return;   // sensor still busy — skip this reading (not a failure)
 
       // Successful read — reset the failure counter
       aht_fail_count = 0;
@@ -140,8 +162,8 @@ void sensors_update(SensorData &data) {
       uint32_t raw_hum  = ((uint32_t)d[1] << 12) | ((uint32_t)d[2] << 4) | (d[3] >> 4);
       uint32_t raw_temp = (((uint32_t)d[3] & 0x0F) << 16) | ((uint32_t)d[4] << 8) | d[5];
 
-      data.air_humidity = (float)raw_hum  * 100.0f / 1048576.0f;
-      data.air_temp     = (float)raw_temp * 200.0f / 1048576.0f - 50.0f;
+      data.air_humidity = (float)raw_hum  * 100.0f / AHT20_RAW_MAX;
+      data.air_temp     = (float)raw_temp * AHT20_TEMP_RANGE_C / AHT20_RAW_MAX - AHT20_TEMP_OFFSET_C;
       data.aht20_ready  = true;
     }
   }

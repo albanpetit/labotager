@@ -15,9 +15,9 @@ static TFT_eSPI tft = TFT_eSPI();
 //
 // Transitions:
 //   MODE_TAB          + PRESS (on SCREEN_PARAMS)         → MODE_PARAM_SELECT
-//   MODE_PARAM_SELECT + PRESS                            → MODE_PARAM_EDIT (param_edit_sub=0)
+//   MODE_PARAM_SELECT + PRESS                            → MODE_PARAM_EDIT (param_edit_sub_idx=0)
 //   MODE_PARAM_SELECT + LONG_PRESS                       → MODE_TAB (applies RTC if dirty)
-//   MODE_PARAM_EDIT   + PRESS (ligne combinée HH:MM)     → bascule param_edit_sub h↔m
+//   MODE_PARAM_EDIT   + PRESS (combined HH:MM row)       → cycle param_edit_sub_idx h↔m
 //   MODE_PARAM_EDIT   + LONG_PRESS                       → MODE_PARAM_SELECT (confirms + applies RTC if dirty)
 
 enum UIMode { MODE_TAB, MODE_DETAILS_SCROLL, MODE_PARAM_SELECT, MODE_PARAM_EDIT };
@@ -33,13 +33,14 @@ static bool    need_full_redraw = true;
 static uint32_t last_refresh_ms = 0;
 static bool    sd_error_shown    = false;
 
-// Startup hardware diagnostics — shown each time an error appears (or reappears).
-// prev_* tracks the last known error state so the screen re-triggers if a sensor
-// is disconnected and reconnected after the initial boot sequence.
-static bool     diag_aht20_shown  = false;
-static bool     diag_rtc_shown    = false;
-static bool     prev_aht20_error  = false;
-static bool     prev_rtc_error    = false;
+// Hardware diagnostic screens — re-triggered each time an error (re)appears.
+// The _displayed flags prevent re-showing while the error is still active.
+// The prev_* flags detect error-clear→re-error transitions so a sensor that
+// disappears after boot and comes back will produce a fresh diagnostic screen.
+static bool     hw_error_aht20_displayed  = false;
+static bool     hw_error_rtc_displayed    = false;
+static bool     prev_aht20_error          = false;
+static bool     prev_rtc_error            = false;
 static uint32_t diag_until_ms     = 0;
 static const uint32_t DIAG_DURATION_MS = 3000;
 
@@ -60,23 +61,22 @@ static void init_staged(const SensorData &data) {
 
 // ─── Editable parameters ──────────────────────────────────────────────────────
 //
-// Lignes combinées :
-//   Index 0 — Heure          : HH:MM       (sub 0=h, 1=m)
-//   Index 1 — Date           : JJ/MM/AAAA  (sub 0=j, 1=m, 2=a)
-//   Index 3 — Debut eclairage: HH:MM       (sub 0=h, 1=m)
-//   Index 4 — Fin eclairage  : HH:MM       (sub 0=h, 1=m)
-// ENC_PRESS en mode édition cycle entre les sous-champs.
-// ENC_LONG_PRESS confirme et repasse en MODE_PARAM_SELECT.
+// Combined rows (multiple sub-fields cycled with ENC_PRESS in edit mode):
+//   Index 0 — Time           : HH:MM       (sub 0=h, 1=m)
+//   Index 1 — Date           : DD/MM/YYYY  (sub 0=d, 1=m, 2=y)
+//   Index 3 — Light start    : HH:MM       (sub 0=h, 1=m)
+//   Index 4 — Light end      : HH:MM       (sub 0=h, 1=m)
+// ENC_LONG_PRESS confirms and returns to MODE_PARAM_SELECT.
 
 enum ParamIndex {
-  PARAM_TIME        = 0,   // combiné HH:MM        (stg_hour, stg_min)
-  PARAM_DATE        = 1,   // combiné JJ/MM/AAAA   (stg_day, stg_month, stg_year)
-  PARAM_GROW_START  = 2,   // combiné JJ/MM/AAAA   (grow_start_day/month/year)
-  PARAM_LED_START   = 3,   // combiné HH:MM        (led_start_hour, led_start_min)
-  PARAM_LED_END     = 4,   // combiné HH:MM        (led_end_hour, led_end_min)
-  PARAM_SOIL        = 5,   // seuil humidité %
-  PARAM_TEMP_MIN    = 6,   // température min °C
-  PARAM_TEMP_MAX    = 7,   // température max °C
+  PARAM_TIME        = 0,   // combined HH:MM        (stg_hour, stg_min)
+  PARAM_DATE        = 1,   // combined DD/MM/YYYY   (stg_day, stg_month, stg_year)
+  PARAM_GROW_START  = 2,   // combined DD/MM/YYYY   (grow_start_day/month/year)
+  PARAM_LED_START   = 3,   // combined HH:MM        (led_start_hour, led_start_min)
+  PARAM_LED_END     = 4,   // combined HH:MM        (led_end_hour, led_end_min)
+  PARAM_SOIL        = 5,   // soil moisture threshold %
+  PARAM_TEMP_MIN    = 6,   // minimum temperature °C
+  PARAM_TEMP_MAX    = 7,   // maximum temperature °C
   PARAM_COUNT       = 8,
 };
 
@@ -91,12 +91,15 @@ static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Temp max C",       // PARAM_TEMP_MAX
 };
 
-static int param_edit_sub = 0;  // sous-champ actif pour les lignes combinées
+// Active sub-field within a combined row:
+//   HH:MM rows  (PARAM_TIME, LED_START, LED_END) : 0 = hour, 1 = minute
+//   DD/MM/YYYY rows (PARAM_DATE, PARAM_GROW_START): 0 = day,  1 = month, 2 = year
+static int param_edit_sub_idx = 0;
 
-// Nombre de sous-champs par ligne combinée (0 = non combiné)
+// Number of sub-fields in a combined row (0 = not combined)
 static int combined_sub_count(int i) {
   if (i == PARAM_TIME || i == PARAM_LED_START || i == PARAM_LED_END) return 2;  // h, m
-  if (i == PARAM_DATE || i == PARAM_GROW_START)                       return 3;  // j, m, a
+  if (i == PARAM_DATE || i == PARAM_GROW_START)                       return 3;  // d, m, y
   return 0;
 }
 
@@ -111,31 +114,31 @@ static int get_param_val(int i, const Settings &s) {
 
 static void apply_delta(int i, int delta, Settings &s) {
   switch (i) {
-    case PARAM_TIME:  // Heure combinée
-      if (param_edit_sub == 0) stg_hour = (uint8_t)constrain((int)stg_hour + delta, 0, 23);
+    case PARAM_TIME:  // combined HH:MM
+      if (param_edit_sub_idx == 0) stg_hour = (uint8_t)constrain((int)stg_hour + delta, 0, 23);
       else                     stg_min  = (uint8_t)constrain((int)stg_min  + delta, 0, 59);
       stg_rtc_dirty = true; break;
-    case PARAM_DATE:  // Date combinée
-      if      (param_edit_sub == 0) stg_day   = (uint8_t)constrain((int)stg_day   + delta, 1, 31);
-      else if (param_edit_sub == 1) stg_month = (uint8_t)constrain((int)stg_month + delta, 1, 12);
+    case PARAM_DATE:  // combined DD/MM/YYYY
+      if      (param_edit_sub_idx == 0) stg_day   = (uint8_t)constrain((int)stg_day   + delta, 1, 31);
+      else if (param_edit_sub_idx == 1) stg_month = (uint8_t)constrain((int)stg_month + delta, 1, 12);
       else                          stg_year  = (uint16_t)constrain((int)stg_year + delta, 2024, 2069);
       stg_rtc_dirty = true; break;
-    case PARAM_GROW_START:  // Debut pousse combiné
-      if      (param_edit_sub == 0) s.grow_start_day   = (uint8_t)constrain((int)s.grow_start_day   + delta, 1, 31);
-      else if (param_edit_sub == 1) s.grow_start_month = (uint8_t)constrain((int)s.grow_start_month + delta, 1, 12);
+    case PARAM_GROW_START:  // combined DD/MM/YYYY
+      if      (param_edit_sub_idx == 0) s.grow_start_day   = (uint8_t)constrain((int)s.grow_start_day   + delta, 1, 31);
+      else if (param_edit_sub_idx == 1) s.grow_start_month = (uint8_t)constrain((int)s.grow_start_month + delta, 1, 12);
       else                          s.grow_start_year  = (uint16_t)constrain((int)s.grow_start_year  + delta, 2024, 2069);
       settings_dirty = true; break;
-    case PARAM_LED_START:  // Debut eclairage combiné
-      if (param_edit_sub == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
+    case PARAM_LED_START:  // combined HH:MM
+      if (param_edit_sub_idx == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
       else                     s.led_start_min  = (uint8_t)constrain((int)s.led_start_min  + delta, 0, 59);
       settings_dirty = true; break;
-    case PARAM_LED_END: {  // Fin eclairage combinée — ne peut pas être égale au début
-      if (param_edit_sub == 0) s.led_end_hour = (uint8_t)constrain((int)s.led_end_hour + delta, 0, 23);
+    case PARAM_LED_END: {  // combined HH:MM — cannot equal the start time
+      if (param_edit_sub_idx == 0) s.led_end_hour = (uint8_t)constrain((int)s.led_end_hour + delta, 0, 23);
       else                     s.led_end_min  = (uint8_t)constrain((int)s.led_end_min  + delta, 0, 59);
-      // Si start == end, sauter d'une minute supplémentaire dans la même direction
+      // If start == end, nudge end one extra minute in the same direction
       if (s.led_end_hour == s.led_start_hour && s.led_end_min == s.led_start_min) {
         uint16_t end_min = (uint16_t)s.led_end_hour * 60 + s.led_end_min;
-        end_min = (uint16_t)((end_min + delta + 1440) % 1440);
+        end_min = (uint16_t)((end_min + delta + MINUTES_PER_DAY) % MINUTES_PER_DAY);
         s.led_end_hour = (uint8_t)(end_min / 60);
         s.led_end_min  = (uint8_t)(end_min % 60);
       }
@@ -346,21 +349,21 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
 
   if (combined_sub_count(item_idx) > 0) {
     if (item_idx == PARAM_DATE) {
-      // Date courante : JJ/MM/AAAA
+      // Staged date: DD/MM/YYYY
       snprintf(val, sizeof(val), "%02d/%02d/%04d", stg_day, stg_month, stg_year);
       if (editing) {
-        const char *sub_names[] = { "j", "m", "a" };
-        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);
+        const char *sub_names[] = { "d", "m", "y" };
+        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub_idx]);
       }
     } else if (item_idx == PARAM_GROW_START) {
-      // Debut pousse : JJ/MM/AAAA
+      // Grow start date: DD/MM/YYYY
       snprintf(val, sizeof(val), "%02d/%02d/%04d", s.grow_start_day, s.grow_start_month, s.grow_start_year);
       if (editing) {
-        const char *sub_names[] = { "j", "m", "a" };
-        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub]);
+        const char *sub_names[] = { "d", "m", "y" };
+        snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub_idx]);
       }
     } else {
-      // PARAM_TIME, PARAM_LED_START, PARAM_LED_END : HH:MM
+      // PARAM_TIME, PARAM_LED_START, PARAM_LED_END: HH:MM
       int h, m;
       if      (item_idx == PARAM_TIME)      { h = stg_hour;          m = stg_min;          }
       else if (item_idx == PARAM_LED_START) { h = s.led_start_hour;  m = s.led_start_min;  }
@@ -368,7 +371,7 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
       snprintf(val, sizeof(val), "%02d:%02d", h, m);
       if (editing) {
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx],
-                 param_edit_sub == 0 ? "h" : "m");
+                 param_edit_sub_idx == 0 ? "h" : "m");
       }
     }
   } else {
@@ -401,10 +404,10 @@ static void render_params(const Settings &s) {
   }
 }
 
-// ─── Écrans d'erreur matérielle ───────────────────────────────────────────────
+// ─── Hardware error screens ───────────────────────────────────────────────────
 //
-// render_hw_error() : fond commun (blanc + icône + bandeau rouge)
-// Chaque périphérique appelle render_hw_error() puis ajoute son message.
+// render_hw_error() draws the common base (white background + error icon + red banner).
+// Each device error calls render_hw_error() then appends its own detail message.
 
 static void render_hw_error(const char *title) {
   tft.fillScreen(TFT_WHITE);
@@ -498,28 +501,28 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
   // ── Hardware diagnostics — re-triggered each time an error (re)appears ───
   // Reset the "shown" flag when the error clears so a reconnected sensor
   // will produce a new diagnostic screen if it fails again.
-  if (prev_aht20_error && !data.aht20_error) diag_aht20_shown = false;
-  if (prev_rtc_error   && !data.rtc_error)   diag_rtc_shown   = false;
+  if (prev_aht20_error && !data.aht20_error) hw_error_aht20_displayed = false;
+  if (prev_rtc_error   && !data.rtc_error)   hw_error_rtc_displayed   = false;
   prev_aht20_error = data.aht20_error;
   prev_rtc_error   = data.rtc_error;
 
-  if (!diag_aht20_shown && data.aht20_error) {
+  if (!hw_error_aht20_displayed && data.aht20_error) {
     if (diag_until_ms == 0) {
       render_aht20_error();
       diag_until_ms = millis() + DIAG_DURATION_MS;
     }
     if (millis() < diag_until_ms && ev == ENC_NONE) return false;
-    diag_aht20_shown = true;
+    hw_error_aht20_displayed = true;
     diag_until_ms    = 0;
     need_full_redraw = true;
   }
-  if (!diag_rtc_shown && data.rtc_error) {
+  if (!hw_error_rtc_displayed && data.rtc_error) {
     if (diag_until_ms == 0) {
       render_rtc_error();
       diag_until_ms = millis() + DIAG_DURATION_MS;
     }
     if (millis() < diag_until_ms && ev == ENC_NONE) return false;
-    diag_rtc_shown   = true;
+    hw_error_rtc_displayed   = true;
     diag_until_ms    = 0;
     need_full_redraw = true;
   }
@@ -612,7 +615,7 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
           param_cursor++;
           if (param_cursor >= params_scroll + PARAMS_ITEMS_SHOWN) params_scroll++;
         } else if (ev == ENC_PRESS) {
-          param_edit_sub = 0;
+          param_edit_sub_idx = 0;
           ui_mode = MODE_PARAM_EDIT;
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
         } else if (ev == ENC_LONG_PRESS) {
@@ -648,14 +651,14 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
           apply_delta(param_cursor, -1, settings);
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
         } else if (ev == ENC_PRESS && combined_sub_count(param_cursor) > 0) {
-          param_edit_sub = (param_edit_sub + 1) % combined_sub_count(param_cursor);
+          param_edit_sub_idx = (param_edit_sub_idx + 1) % combined_sub_count(param_cursor);
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
         } else if (ev == ENC_LONG_PRESS) {
           if (stg_rtc_dirty) {
             rtc_set_datetime(stg_year, stg_month, stg_day, stg_hour, stg_min, 0);
             stg_rtc_dirty = false;
           }
-          param_edit_sub = 0;
+          param_edit_sub_idx = 0;
           ui_mode = MODE_PARAM_SELECT;
           render_param_row(param_cursor, param_cursor - params_scroll, true, false, settings);
         }

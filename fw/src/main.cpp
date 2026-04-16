@@ -110,7 +110,7 @@ void loop() {
   set_stage(1); sensors_update(data);
   set_stage(2); rtc_update(data);
 
-  // Premier démarrage : enregistre la date du jour comme date de début de pousse.
+  // First boot: record today as the grow start date.
   if (settings.grow_start_day == 0 && data.rtc_ready) {
     settings.grow_start_day   = data.day;
     settings.grow_start_month = data.month;

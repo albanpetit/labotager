@@ -56,6 +56,14 @@
 #define SCREEN_W      320
 #define SCREEN_H      240
 
+// ─── Time ─────────────────────────────────────────────────────────────────────
+#define MINUTES_PER_DAY   1440   // 24 × 60 — wrapping modulus for time-of-day arithmetic
+
+// ─── Encoder ──────────────────────────────────────────────────────────────────
+#define ENC_POLL_US        250   // quadrature polling period (µs) — 4 kHz
+#define ENC_SW_DEBOUNCE_MS  15   // switch debounce window (ms)
+#define ENC_SW_LONG_MS     500   // long-press threshold (ms)
+
 // ─── Miscellaneous ────────────────────────────────────────────────────────────
 #define MAX_IMAGE_WIDTH   320
 #define SERIAL_BAUD       115200
