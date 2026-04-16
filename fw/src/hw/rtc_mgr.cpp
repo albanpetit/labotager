@@ -7,6 +7,12 @@
 // Shared I2C bus (defined in main.cpp)
 extern MbedI2C rtcWire;
 
+// DS3231M register addresses (datasheet section 8.2)
+#define DS3231_REG_SECONDS   0x00   // start of time registers (seconds … year)
+#define DS3231_REG_DOW       0x03   // day-of-week register (unused, written as 1)
+#define DS3231_REG_STATUS    0x0F   // status register
+#define DS3231_STATUS_OSF    0x80   // bit 7 — Oscillator Stop Flag (clear to confirm time is valid)
+
 static DFRobot_DS3231M rtc(&rtcWire);
 static bool rtc_failed = false;
 
@@ -44,8 +50,9 @@ void rtc_update(SensorData &data) {
   if (rtc_failed) return;
 
   static uint32_t last_read = 0;
-  if (millis() - last_read < 1000) return;
-  last_read = millis();
+  uint32_t now = millis();
+  if (now - last_read < 1000) return;
+  last_read = now;
 
   rtc.getNowTime();
 
@@ -67,28 +74,28 @@ void rtc_set_datetime(uint16_t year, uint8_t month, uint8_t day,
     return ((v / 10) << 4) | (v % 10);
   };
 
-  // DS3231M register map — write starting at address 0x00
+  // DS3231M register map — write starting at the seconds register
   rtcWire.beginTransmission(DS3231_ADDR);
-  rtcWire.write(0x00);                           // start address: seconds register
-  rtcWire.write(to_bcd(second));                 // 0x00 — seconds
-  rtcWire.write(to_bcd(minute));                 // 0x01 — minutes
-  rtcWire.write(to_bcd(hour));                   // 0x02 — hours (24-h mode, bits 7:6 = 0)
-  rtcWire.write(0x01);                           // 0x03 — day-of-week (unused, set to 1)
-  rtcWire.write(to_bcd(day));                    // 0x04 — day-of-month
-  rtcWire.write(to_bcd(month));                  // 0x05 — month (century bit 7 = 0)
-  rtcWire.write(to_bcd((uint8_t)(year - 1970))); // 0x06 — year offset from 1970 (DFRobot convention)
+  rtcWire.write(DS3231_REG_SECONDS);              // start address
+  rtcWire.write(to_bcd(second));                  // 0x00 — seconds
+  rtcWire.write(to_bcd(minute));                  // 0x01 — minutes
+  rtcWire.write(to_bcd(hour));                    // 0x02 — hours (24-h mode, bits 7:6 = 0)
+  rtcWire.write(DS3231_REG_DOW);                  // 0x03 — day-of-week (unused, written as 1)
+  rtcWire.write(to_bcd(day));                     // 0x04 — day-of-month
+  rtcWire.write(to_bcd(month));                   // 0x05 — month (century bit 7 = 0)
+  rtcWire.write(to_bcd((uint8_t)(year - 1970)));  // 0x06 — year offset from 1970 (DFRobot convention)
   rtcWire.endTransmission();
 
-  // Clear the OSF (Oscillator Stop Flag) in status register 0x0F.
+  // Clear the OSF (Oscillator Stop Flag) in the status register.
   // Without this lostPower() stays true on the next boot and overwrites the time.
   rtcWire.beginTransmission(DS3231_ADDR);
-  rtcWire.write(0x0F);
+  rtcWire.write(DS3231_REG_STATUS);
   rtcWire.endTransmission();
   rtcWire.requestFrom((int)DS3231_ADDR, 1);
   uint8_t status = rtcWire.read();
   rtcWire.beginTransmission(DS3231_ADDR);
-  rtcWire.write(0x0F);
-  rtcWire.write(status & 0x7F);   // clear bit 7 (OSF)
+  rtcWire.write(DS3231_REG_STATUS);
+  rtcWire.write(status & ~DS3231_STATUS_OSF);   // clear the OSF bit
   rtcWire.endTransmission();
 
   char buf[56];

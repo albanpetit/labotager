@@ -30,7 +30,6 @@ struct SensorData {
   bool     rtc_error;         // true when DS3231M failed to initialise
 
   // Logger
-  uint32_t last_log_millis;   // millis() timestamp of the last CSV entry
   bool     sd_error;          // true when the SD card is absent or inaccessible
 
   // Last successful CSV save (displayed on Details screen)

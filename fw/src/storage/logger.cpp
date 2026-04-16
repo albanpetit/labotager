@@ -65,7 +65,28 @@ static void load_config(Settings &s) {
     }
   }
   f.close();
+  settings_sanitize(s);
   if (Serial) Serial.println("[SD] Config loaded from " CONFIG_FILE);
+}
+
+// Clamp all numeric settings to their valid ranges after loading from disk.
+// Guards against hand-edited or corrupted config.txt producing invalid state
+// (e.g. led_start_hour=99, plant_temp_min=-200).
+static void settings_sanitize(Settings &s) {
+  s.soil_threshold   = (uint8_t) constrain(s.soil_threshold,   0,    100);
+  s.plant_temp_min   = (int8_t)  constrain(s.plant_temp_min,   -40,  60);
+  s.plant_temp_max   = (int8_t)  constrain(s.plant_temp_max,   -40,  60);
+  s.watering_check_s = (uint16_t)constrain(s.watering_check_s, 1,    3600);
+  s.led_start_hour   = (uint8_t) constrain(s.led_start_hour,   0,    23);
+  s.led_start_min    = (uint8_t) constrain(s.led_start_min,    0,    59);
+  s.led_end_hour     = (uint8_t) constrain(s.led_end_hour,     0,    23);
+  s.led_end_min      = (uint8_t) constrain(s.led_end_min,      0,    59);
+  s.log_interval_s   = (uint16_t)constrain(s.log_interval_s,   1,    86400);
+  s.grow_start_day   = (uint8_t) constrain(s.grow_start_day,   0,    31);
+  s.grow_start_month = (uint8_t) constrain(s.grow_start_month, 0,    12);
+  // grow_start_year: 0 = not set; otherwise clamp to a plausible range
+  if (s.grow_start_year != 0)
+    s.grow_start_year = (uint16_t)constrain(s.grow_start_year, 2020, 2099);
 }
 
 // ─── Public ───────────────────────────────────────────────────────────────────
@@ -123,9 +144,10 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
   }
 
   // ── Periodic CSV write ────────────────────────────────────────────────────
+  static uint32_t last_log_ms = 0;
   now = millis();
-  if (now - data.last_log_millis < (uint32_t)settings.log_interval_s * 1000UL) return;
-  data.last_log_millis = now;
+  if (now - last_log_ms < (uint32_t)settings.log_interval_s * 1000UL) return;
+  last_log_ms = now;
 
   // Kick the watchdog before the SD write — a slow card can block for ~1-2 s
   // which, combined with other loop work, risks approaching the 8 s timeout.

@@ -19,12 +19,12 @@ void lighting_update(SensorData &data, const Settings &settings) {
 
   bool on;
   if (start_min == end_min) {
-    on = false;  // start == end → aucune plage définie
+    on = false;  // start == end → no window defined
   } else if (start_min < end_min) {
-    // Plage normale (ex. 08:00 → 22:00)
+    // Normal window (e.g. 08:00 → 22:00)
     on = (now_min >= start_min && now_min < end_min);
   } else {
-    // Plage avec passage à minuit (ex. 22:00 → 06:00)
+    // Overnight window (e.g. 22:00 → 06:00)
     on = (now_min >= start_min || now_min < end_min);
   }
 

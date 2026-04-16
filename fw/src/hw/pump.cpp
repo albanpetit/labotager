@@ -38,7 +38,7 @@ void pump_update(SensorData &data, const Settings &settings) {
       break;
 
     case PUMP_PUMPING:
-      // Arrêt immédiat si les LEDs s'éteignent (fin de la période d'arrosage)
+      // Immediate stop when LEDs turn off (end of the watering window)
       if (!data.led_on) {
         digitalWrite(GPIO_MOTOR, LOW);
         pump_state   = PUMP_IDLE;
