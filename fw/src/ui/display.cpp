@@ -45,6 +45,21 @@ static uint32_t diag_until_ms     = 0;
 static const uint32_t DIAG_DURATION_MS  = 3000;
 static const uint32_t HOME_REFRESH_MS   = 60000;   // periodic live-data refresh on Home screen
 
+// ─── List row layout (Details and Settings share the same item dimensions) ────
+#define LIST_TEXT_X_LEFT    50   // x of the left-aligned label inside a list item
+#define LIST_TEXT_X_RIGHT  265   // x of the right-aligned value inside a list item
+#define LIST_TEXT_Y_OFFSET  13   // vertical offset from item top to text baseline
+
+// ─── Hardware error screen layout ─────────────────────────────────────────────
+#define HW_ERROR_MSG_Y     172   // y of the device-specific message on error screens
+#define HW_ERROR_HINT_Y    200   // y of the "press to continue" hint
+
+// ─── Parameter edit bounds and buffer sizes ───────────────────────────────────
+#define PARAM_YEAR_MIN        2024
+#define PARAM_YEAR_MAX        2069
+#define PARAM_VAL_BUF_LEN       12   // fits "31/12/2069\0" (10 chars + NUL, padded to 12)
+#define PARAM_LABEL_BUF_LEN     28   // fits "Debut eclairage (h)\0" (19 chars, padded to 28)
+
 // ─── Staged date/time (edited in Settings, applied to RTC on confirm) ─────────
 
 static uint16_t stg_year;
@@ -121,6 +136,12 @@ static int get_param_val(int i, const Settings &s) {
   }
 }
 
+static void apply_date_delta(int sub, uint8_t &d, uint8_t &mo, uint16_t &yr, int delta) {
+  if      (sub == 0) d  = (uint8_t) constrain((int)d  + delta, 1, 31);
+  else if (sub == 1) mo = (uint8_t) constrain((int)mo + delta, 1, 12);
+  else               yr = (uint16_t)constrain((int)yr + delta, PARAM_YEAR_MIN, PARAM_YEAR_MAX);
+}
+
 static void apply_delta(int i, int delta, Settings &s) {
   switch (i) {
     case PARAM_TIME:  // combined HH:MM
@@ -128,14 +149,10 @@ static void apply_delta(int i, int delta, Settings &s) {
       else                     stg_min  = (uint8_t)constrain((int)stg_min  + delta, 0, 59);
       stg_rtc_dirty = true; break;
     case PARAM_DATE:  // combined DD/MM/YYYY
-      if      (param_edit_sub_idx == 0) stg_day   = (uint8_t)constrain((int)stg_day   + delta, 1, 31);
-      else if (param_edit_sub_idx == 1) stg_month = (uint8_t)constrain((int)stg_month + delta, 1, 12);
-      else                          stg_year  = (uint16_t)constrain((int)stg_year + delta, 2024, 2069);
+      apply_date_delta(param_edit_sub_idx, stg_day, stg_month, stg_year, delta);
       stg_rtc_dirty = true; break;
     case PARAM_GROW_START:  // combined DD/MM/YYYY
-      if      (param_edit_sub_idx == 0) s.grow_start_day   = (uint8_t)constrain((int)s.grow_start_day   + delta, 1, 31);
-      else if (param_edit_sub_idx == 1) s.grow_start_month = (uint8_t)constrain((int)s.grow_start_month + delta, 1, 12);
-      else                          s.grow_start_year  = (uint16_t)constrain((int)s.grow_start_year  + delta, 2024, 2069);
+      apply_date_delta(param_edit_sub_idx, s.grow_start_day, s.grow_start_month, s.grow_start_year, delta);
       settings_dirty = true; break;
     case PARAM_LED_START:  // combined HH:MM
       if (param_edit_sub_idx == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
@@ -167,6 +184,7 @@ static void apply_delta(int i, int delta, Settings &s) {
 
 // ─── Grow days calculation ────────────────────────────────────────────────────
 
+// Julian Day Number — Fliegel & Van Flandern integer formula (CACM vol.11, 1968).
 static int32_t julian_day(int d, int m, int y) {
   return 367L*y - 7*(y+(m+9)/12)/4 + 275*m/9 + d + 1721013L;
 }
@@ -297,6 +315,15 @@ static void render_home(const SensorData &data, const Settings &settings) {
 #define DETAILS_ITEM_Y0     62    // y of first visible item slot
 #define DETAILS_ITEM_STEP   34    // vertical spacing between items (px)
 
+enum DetailIndex {
+  DETAIL_TEMP     = 0,
+  DETAIL_HUM      = 1,
+  DETAIL_SOIL     = 2,
+  DETAIL_PUMP     = 3,
+  DETAIL_LED      = 4,
+  DETAIL_LAST_LOG = 5,
+};
+
 static const char * const DETAIL_LABELS[DETAILS_ITEM_COUNT] = {
   "Temperature air",
   "Humidite air",
@@ -308,18 +335,18 @@ static const char * const DETAIL_LABELS[DETAILS_ITEM_COUNT] = {
 
 static void get_detail_value(int i, const SensorData &data, char *buf, size_t len) {
   switch (i) {
-    case 0:
-      if (data.aht20_ready) snprintf(buf, len, "%.1f C",   data.air_temp);
+    case DETAIL_TEMP:
+      if (data.aht20_ready) snprintf(buf, len, "%.1f C",  data.air_temp);
       else                  snprintf(buf, len, "-- C");
       break;
-    case 1:
-      if (data.aht20_ready) snprintf(buf, len, "%.0f %%",  data.air_humidity);
+    case DETAIL_HUM:
+      if (data.aht20_ready) snprintf(buf, len, "%.0f %%", data.air_humidity);
       else                  snprintf(buf, len, "-- %%");
       break;
-    case 2: snprintf(buf, len, "%d %%", data.soil_pct); break;
-    case 3: snprintf(buf, len, "%s", data.pump_on ? "ON" : "OFF"); break;
-    case 4: snprintf(buf, len, "%s", data.led_on  ? "ON" : "OFF"); break;
-    case 5:
+    case DETAIL_SOIL:     snprintf(buf, len, "%d %%", data.soil_pct); break;
+    case DETAIL_PUMP:     snprintf(buf, len, "%s", data.pump_on ? "ON" : "OFF"); break;
+    case DETAIL_LED:      snprintf(buf, len, "%s", data.led_on  ? "ON" : "OFF"); break;
+    case DETAIL_LAST_LOG:
       if (data.has_last_save)
         snprintf(buf, len, "%02d/%02d %02d:%02d",
                  data.last_save_day, data.last_save_month,
@@ -331,6 +358,19 @@ static void get_detail_value(int i, const SensorData &data, char *buf, size_t le
   }
 }
 
+// Shared text renderer for both Details and Settings list rows.
+static void render_row_text(int y, const char *label, const char *val, uint16_t val_color) {
+  int ty = y + LIST_TEXT_Y_OFFSET;
+  tft.setFreeFont(UI_FONT);
+  tft.setTextSize(UI_FONT_SIZE);
+  tft.setTextColor(UI_COLOR_TEXT);
+  tft.setTextDatum(TL_DATUM);
+  tft.drawString(label, LIST_TEXT_X_LEFT, ty);
+  tft.setTextDatum(TR_DATUM);
+  tft.setTextColor(val_color);
+  tft.drawString(val, LIST_TEXT_X_RIGHT, ty);
+}
+
 static void render_details_row(int item_idx, int slot, bool selected, const SensorData &data) {
   int y = DETAILS_ITEM_Y0 + slot * DETAILS_ITEM_STEP;
   if (selected) ui_draw_details_item_selected(y);
@@ -338,15 +378,7 @@ static void render_details_row(int item_idx, int slot, bool selected, const Sens
 
   char val[24];
   get_detail_value(item_idx, data, val, sizeof(val));
-
-  int ty = y + 13;
-  tft.setFreeFont(UI_FONT);
-  tft.setTextSize(UI_FONT_SIZE);
-  tft.setTextColor(UI_COLOR_TEXT);
-  tft.setTextDatum(TL_DATUM);
-  tft.drawString(DETAIL_LABELS[item_idx], 50, ty);
-  tft.setTextDatum(TR_DATUM);
-  tft.drawString(val, 265, ty);
+  render_row_text(y, DETAIL_LABELS[item_idx], val, UI_COLOR_TEXT);
 }
 
 static void render_details(const SensorData &data) {
@@ -375,8 +407,8 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
   if (selected) ui_draw_params_item_selected(y);
   else          ui_draw_params_item(y);
 
-  char val[12];
-  char label[28];
+  char val[PARAM_VAL_BUF_LEN];
+  char label[PARAM_LABEL_BUF_LEN];
   strncpy(label, PARAM_LABELS[item_idx], sizeof(label) - 1);
   label[sizeof(label) - 1] = '\0';
 
@@ -408,15 +440,7 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
     snprintf(val, sizeof(val), "%d", v);
   }
 
-  int ty = y + 13;
-  tft.setFreeFont(UI_FONT);
-  tft.setTextSize(UI_FONT_SIZE);
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(UI_COLOR_TEXT);
-  tft.drawString(label, 50, ty);
-  tft.setTextDatum(TR_DATUM);
-  tft.setTextColor(editing ? (uint16_t)UI_COLOR_EDIT : (uint16_t)UI_COLOR_TEXT);
-  tft.drawString(val, 265, ty);
+  render_row_text(y, label, val, editing ? (uint16_t)UI_COLOR_EDIT : (uint16_t)UI_COLOR_TEXT);
 }
 
 static void render_params(const Settings &s) {
@@ -451,16 +475,16 @@ static void render_hw_error(const char *title) {
 static void render_hw_error_footer(const char *msg) {
   tft.setTextSize(UI_FONT_SIZE);
   tft.setTextColor(TFT_BLACK, TFT_WHITE);
-  tft.drawString(msg, SCREEN_W / 2, 172);
+  tft.drawString(msg, SCREEN_W / 2, HW_ERROR_MSG_Y);
   tft.setTextColor(UI_COLOR_HINT, TFT_WHITE);
-  tft.drawString("Appuyer pour continuer", SCREEN_W / 2, 200);
+  tft.drawString("Appuyer pour continuer", SCREEN_W / 2, HW_ERROR_HINT_Y);
 }
 
 static void render_sd_error() {
   render_hw_error("ERREUR CARTE SD");
   tft.setTextSize(UI_FONT_SIZE);
   tft.setTextColor(TFT_BLACK, TFT_WHITE);
-  tft.drawString("Carte SD absente ou inaccessible.", SCREEN_W / 2, 180);
+  tft.drawString("Carte SD absente ou inaccessible.", SCREEN_W / 2, HW_ERROR_MSG_Y);
 }
 
 static void render_aht20_error() {
@@ -653,11 +677,8 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
 
       // ── Value editing ─────────────────────────────────────────────────────
       case MODE_PARAM_EDIT:
-        if (ev == ENC_UP) {
-          apply_delta(param_cursor, +1, settings);
-          render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
-        } else if (ev == ENC_DOWN) {
-          apply_delta(param_cursor, -1, settings);
+        if (ev == ENC_UP || ev == ENC_DOWN) {
+          apply_delta(param_cursor, (ev == ENC_UP) ? +1 : -1, settings);
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
         } else if (ev == ENC_PRESS && combined_sub_count(param_cursor) > 0) {
           param_edit_sub_idx = (param_edit_sub_idx + 1) % combined_sub_count(param_cursor);

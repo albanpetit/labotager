@@ -7,6 +7,7 @@
 // SD timing constants
 #define SD_RETRY_INTERVAL_MS   5000   // delay before re-attempting SD init after failure (ms)
 #define SD_HEALTH_INTERVAL_MS 10000   // interval between SD card health checks (ms)
+#define CSV_LOG_LINE_LEN         80   // "YYYY-MM-DDTHH:MM:SS,±TTT.TT,HHH.H,SSS,P,L\0" ~44 chars; 80 gives margin
 
 // SPI1 hardware — pins defined in config.h
 static MbedSPI sdSPI(GPIO_SD_MISO, GPIO_SD_MOSI, GPIO_SD_SCK);
@@ -182,7 +183,7 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
     return;
   }
 
-  char buf[80];
+  char buf[CSV_LOG_LINE_LEN];
   snprintf(buf, sizeof(buf),
       "%04d-%02d-%02dT%02d:%02d:%02d,%.2f,%.1f,%d,%d,%d",
       data.year, data.month, data.day,

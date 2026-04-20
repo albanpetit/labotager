@@ -52,7 +52,7 @@ void setup() {
   settings_apply_defaults(settings);
 
   Serial.begin(SERIAL_BAUD);
-  delay(2000);
+  delay(2000);   // allow USB CDC to enumerate before the first Serial output
 
   // 3. Check if this boot follows a watchdog reset, and if so, report which
   //    module was executing when the loop froze.
