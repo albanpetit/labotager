@@ -176,6 +176,30 @@ static int32_t days_elapsed(int d1, int m1, int y1, int d2, int m2, int y2) {
   return diff < 0 ? 0 : diff;
 }
 
+// ─── Scrollable list helper ───────────────────────────────────────────────────
+
+enum ScrollResult { SCROLL_UNCHANGED, SCROLL_SAME_WINDOW, SCROLL_WINDOW_SHIFTED };
+
+// Move cursor up/down and keep the scroll window in sync.
+// Returns SCROLL_UNCHANGED when ev is not ENC_UP/ENC_DOWN or the cursor is
+// already at a boundary; SCROLL_SAME_WINDOW when only the cursor moved;
+// SCROLL_WINDOW_SHIFTED when the visible window had to scroll.
+static ScrollResult scroll_update(int &cursor, int &scroll,
+                                  EncEvent ev, int max_count, int items_shown) {
+  if (ev != ENC_UP && ev != ENC_DOWN) return SCROLL_UNCHANGED;
+  int prev_scroll = scroll;
+  if (ev == ENC_UP && cursor > 0) {
+    cursor--;
+    if (cursor < scroll) scroll--;
+  } else if (ev == ENC_DOWN && cursor < max_count - 1) {
+    cursor++;
+    if (cursor >= scroll + items_shown) scroll++;
+  } else {
+    return SCROLL_UNCHANGED;
+  }
+  return (scroll != prev_scroll) ? SCROLL_WINDOW_SHIFTED : SCROLL_SAME_WINDOW;
+}
+
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
 static void render_tabbar() {
@@ -449,6 +473,24 @@ static void render_rtc_error() {
   render_hw_error_footer("Module DS3231M absent ou inaccessible.");
 }
 
+// Show a hardware diagnostic screen and block rendering until dismissed.
+// Returns false while the screen is still showing (caller should return early).
+// Sets need_full_redraw when the diagnostic is dismissed so the normal UI
+// is fully repainted on the next call.
+static bool handle_hw_diag(bool &displayed, bool error_active,
+                            void (*render_fn)(), EncEvent ev) {
+  if (displayed || !error_active) return true;
+  if (diag_until_ms == 0) {
+    render_fn();
+    diag_until_ms = millis() + DIAG_DURATION_MS;
+  }
+  if (millis() < diag_until_ms && ev == ENC_NONE) return false;
+  displayed        = true;
+  diag_until_ms    = 0;
+  need_full_redraw = true;
+  return true;
+}
+
 // ─── Public ───────────────────────────────────────────────────────────────────
 
 // ST7789 DISPON command — sent after the frame buffer is filled black.
@@ -511,26 +553,8 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
   prev_aht20_error = data.aht20_error;
   prev_rtc_error   = data.rtc_error;
 
-  if (!hw_error_aht20_displayed && data.aht20_error) {
-    if (diag_until_ms == 0) {
-      render_aht20_error();
-      diag_until_ms = millis() + DIAG_DURATION_MS;
-    }
-    if (millis() < diag_until_ms && ev == ENC_NONE) return false;
-    hw_error_aht20_displayed = true;
-    diag_until_ms    = 0;
-    need_full_redraw = true;
-  }
-  if (!hw_error_rtc_displayed && data.rtc_error) {
-    if (diag_until_ms == 0) {
-      render_rtc_error();
-      diag_until_ms = millis() + DIAG_DURATION_MS;
-    }
-    if (millis() < diag_until_ms && ev == ENC_NONE) return false;
-    hw_error_rtc_displayed   = true;
-    diag_until_ms    = 0;
-    need_full_redraw = true;
-  }
+  if (!handle_hw_diag(hw_error_aht20_displayed, data.aht20_error, render_aht20_error, ev)) return false;
+  if (!handle_hw_diag(hw_error_rtc_displayed,   data.rtc_error,   render_rtc_error,   ev)) return false;
 
   bool do_render = false;
 
@@ -584,62 +608,45 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
       // Partial update when cursor moves within the visible window (no scroll):
       // redraw only the old and new row.  Full redraw when the window shifts.
       case MODE_DETAILS_SCROLL: {
+        if (ev == ENC_LONG_PRESS) { ui_mode = MODE_TAB; do_render = true; break; }
         int prev_cursor = details_cursor;
-        int prev_scroll = details_scroll;
-        if (ev == ENC_UP && details_cursor > 0) {
-          details_cursor--;
-          if (details_cursor < details_scroll) details_scroll--;
-        } else if (ev == ENC_DOWN && details_cursor < DETAILS_ITEM_COUNT - 1) {
-          details_cursor++;
-          if (details_cursor >= details_scroll + DETAILS_ITEMS_SHOWN) details_scroll++;
-        } else if (ev == ENC_LONG_PRESS) {
-          ui_mode   = MODE_TAB;
+        ScrollResult sr = scroll_update(details_cursor, details_scroll,
+                                        ev, DETAILS_ITEM_COUNT, DETAILS_ITEMS_SHOWN);
+        if (sr == SCROLL_WINDOW_SHIFTED) {
           do_render = true;
-          break;
-        }
-        if (details_cursor != prev_cursor) {
-          if (details_scroll != prev_scroll) {
-            do_render = true;   // window shifted — full redraw
-          } else {
-            render_details_row(prev_cursor, prev_cursor - details_scroll, false, data);
-            render_details_row(details_cursor, details_cursor - details_scroll, true, data);
-          }
+        } else if (sr == SCROLL_SAME_WINDOW) {
+          render_details_row(prev_cursor,      prev_cursor      - details_scroll, false, data);
+          render_details_row(details_cursor,   details_cursor   - details_scroll, true,  data);
         }
         break;
       }
 
       // ── Parameter selection ───────────────────────────────────────────────
-      // Scroll logic mirrors details page: linear cursor, no wrap-around.
       case MODE_PARAM_SELECT: {
-        int prev_cursor = param_cursor;
-        int prev_scroll = params_scroll;
-        if (ev == ENC_UP && param_cursor > 0) {
-          param_cursor--;
-          if (param_cursor < params_scroll) params_scroll--;
-        } else if (ev == ENC_DOWN && param_cursor < PARAM_COUNT - 1) {
-          param_cursor++;
-          if (param_cursor >= params_scroll + PARAMS_ITEMS_SHOWN) params_scroll++;
-        } else if (ev == ENC_PRESS) {
+        if (ev == ENC_PRESS) {
           param_edit_sub_idx = 0;
           ui_mode = MODE_PARAM_EDIT;
           render_param_row(param_cursor, param_cursor - params_scroll, true, true, settings);
-        } else if (ev == ENC_LONG_PRESS) {
-          commit_staged_rtc();
-          ui_mode   = MODE_TAB;
-          do_render = true;
+          break;
         }
-        if (param_cursor != prev_cursor) {
-          if (params_scroll != prev_scroll) {
-            // Scroll window shifted — redraw all visible slots only (no background/title)
-            for (int slot = 0; slot < PARAMS_ITEMS_SHOWN; slot++) {
-              int item = params_scroll + slot;
-              if (item >= PARAM_COUNT) break;
-              render_param_row(item, slot, item == param_cursor, false, settings);
-            }
-          } else {
-            render_param_row(prev_cursor, prev_cursor - params_scroll, false, false, settings);
-            render_param_row(param_cursor, param_cursor - params_scroll, true, false, settings);
+        if (ev == ENC_LONG_PRESS) {
+          commit_staged_rtc();
+          ui_mode = MODE_TAB; do_render = true;
+          break;
+        }
+        int prev_cursor = param_cursor;
+        ScrollResult sr = scroll_update(param_cursor, params_scroll,
+                                        ev, PARAM_COUNT, PARAMS_ITEMS_SHOWN);
+        if (sr == SCROLL_WINDOW_SHIFTED) {
+          // Redraw visible slots only — no background or title repaint
+          for (int slot = 0; slot < PARAMS_ITEMS_SHOWN; slot++) {
+            int item = params_scroll + slot;
+            if (item >= PARAM_COUNT) break;
+            render_param_row(item, slot, item == param_cursor, false, settings);
           }
+        } else if (sr == SCROLL_SAME_WINDOW) {
+          render_param_row(prev_cursor,  prev_cursor  - params_scroll, false, false, settings);
+          render_param_row(param_cursor, param_cursor - params_scroll, true,  false, settings);
         }
         break;
       }
