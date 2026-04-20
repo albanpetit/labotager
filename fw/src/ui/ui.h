@@ -6,8 +6,11 @@
 #include "components/custom_font.h"
 #define UI_FONT       (&custom_font)
 #define UI_FONT_SIZE  1
-#define UI_COLOR_TEXT 0x2948   // #2e2847 en RGB565
-#define UI_COLOR_EDIT 0x2B08   // #2b6043 en RGB565 — valeur en cours d'édition
+#define UI_COLOR_TEXT     0x2948   // #2e2847 — main text color
+#define UI_COLOR_EDIT     0x2B08   // #2b6043 — value being edited
+#define UI_COLOR_ERROR_BG 0xC000   // red banner background on hardware error screens
+#define UI_COLOR_HINT     0x8410   // dim grey — secondary/hint text
+#define UI_ERROR_BANNER_H   52     // height of the error banner (px)
 
 
 // Must be called once from display_init() before any draw call.

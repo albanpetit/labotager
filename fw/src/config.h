@@ -64,9 +64,10 @@ static inline uint16_t minutes_since_midnight(uint8_t h, uint8_t m) {
 }
 
 // ─── Encoder ──────────────────────────────────────────────────────────────────
-#define ENC_POLL_US        250   // quadrature polling period (µs) — 4 kHz
-#define ENC_SW_DEBOUNCE_MS  15   // switch debounce window (ms)
-#define ENC_SW_LONG_MS     500   // long-press threshold (ms)
+#define ENC_POLL_US           250   // quadrature polling period (µs) — 4 kHz
+#define ENC_SW_DEBOUNCE_MS     15   // switch debounce window (ms)
+#define ENC_SW_LONG_MS        500   // long-press threshold (ms)
+#define ENC_DETENT_TRANSITIONS  4   // quadrature transitions per mechanical detent (PEC12R)
 
 // ─── Miscellaneous ────────────────────────────────────────────────────────────
 #define MAX_IMAGE_WIDTH   320

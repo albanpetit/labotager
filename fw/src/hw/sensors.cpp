@@ -31,7 +31,12 @@ extern MbedI2C rtcWire;
 
 // AHT20 measurement timing (datasheet section 5.4)
 #define AHT20_CYCLE_MS          2000   // minimum interval between measurement cycles (ms)
-#define AHT20_CONV_MS           80     // conversion time after trigger (ms)
+#define AHT20_CONV_MS             80   // conversion time after trigger (ms)
+#define AHT20_INIT_SETTLE_MS      10   // settle time after sending the init/calibration command
+#define AHT20_FRAME_BYTES          6   // bytes returned by a single measurement read
+
+// Soil moisture ADC
+#define SOIL_READ_INTERVAL_MS    500   // ADC sampling interval (ms)
 
 // AHT20 raw-to-physical conversion (datasheet section 6.1)
 // Both humidity and temperature use 20-bit unsigned values (range 0..2^20-1).
@@ -66,7 +71,7 @@ static bool aht20_detect_and_init() {
     rtcWire.write(AHT20_CMD_INIT_P1);
     rtcWire.write(AHT20_CMD_INIT_P2);
     rtcWire.endTransmission();
-    delay(10);
+    delay(AHT20_INIT_SETTLE_MS);
 
     rtcWire.requestFrom((uint8_t)AHT20_ADDR, (uint8_t)1);
     raw    = rtcWire.read();
@@ -107,7 +112,7 @@ void sensors_update(SensorData &data) {
 
   // ── Soil moisture (ADC, every 500 ms) ────────────────────────────────────
   static uint32_t last_soil = 0;
-  if (now - last_soil >= 500) {
+  if (now - last_soil >= SOIL_READ_INTERVAL_MS) {
     last_soil     = now;
     data.soil_raw = analogRead(GPIO_SOIL);
     data.soil_pct = (uint8_t)constrain(
@@ -142,9 +147,9 @@ void sensors_update(SensorData &data) {
       aht_state      = AHT_IDLE;
       aht_last_cycle = now;
 
-      uint8_t got = rtcWire.requestFrom((uint8_t)AHT20_ADDR, (uint8_t)6);
-      uint8_t d[6];
-      for (int i = 0; i < 6; i++) {
+      uint8_t got = rtcWire.requestFrom((uint8_t)AHT20_ADDR, (uint8_t)AHT20_FRAME_BYTES);
+      uint8_t d[AHT20_FRAME_BYTES];
+      for (int i = 0; i < AHT20_FRAME_BYTES; i++) {
         int b = rtcWire.read();
         d[i]  = (b >= 0) ? (uint8_t)b : 0xFF;
       }

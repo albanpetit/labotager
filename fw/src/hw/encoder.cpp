@@ -77,8 +77,8 @@ EncEvent encoder_poll() {
   int accum = enc_accum;
   enc_accum = 0;
   __enable_irq();
-  if      (accum >=  4) return ENC_DOWN;
-  else if (accum <= -4) return ENC_UP;
+  if      (accum >=  ENC_DETENT_TRANSITIONS) return ENC_DOWN;
+  else if (accum <= -ENC_DETENT_TRANSITIONS) return ENC_UP;
   // Sub-detent move: restore remaining accumulator (keeps partial counts)
   __disable_irq();
   enc_accum += accum;

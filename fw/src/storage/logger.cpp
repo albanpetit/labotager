@@ -4,6 +4,10 @@
 #include <SPI.h>
 #include <SdFat.h>
 
+// SD timing constants
+#define SD_RETRY_INTERVAL_MS   5000   // delay before re-attempting SD init after failure (ms)
+#define SD_HEALTH_INTERVAL_MS 10000   // interval between SD card health checks (ms)
+
 // SPI1 hardware — pins defined in config.h
 static MbedSPI sdSPI(GPIO_SD_MISO, GPIO_SD_MOSI, GPIO_SD_SCK);
 static SdFat32  sd;
@@ -117,7 +121,7 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
   if (!sd_ready) {
     data.sd_error = true;
     uint32_t now  = millis();
-    if (now - last_retry >= 5000UL) {
+    if (now - last_retry >= SD_RETRY_INTERVAL_MS) {
       last_retry = now;
       SdSpiConfig cfg(GPIO_SD_CS, DEDICATED_SPI, SD_SCK_MHZ(SD_SPEED_MHZ), &sdSPI);
       if (sd.begin(cfg)) {
@@ -133,7 +137,7 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
 
   // ── Periodic SD health check (every 10 s) — detects card removal ──────────
   uint32_t now = millis();
-  if (now - last_health >= 10000UL) {
+  if (now - last_health >= SD_HEALTH_INTERVAL_MS) {
     last_health = now;
     if (!sd.exists(LOG_DIR)) {
       sd_ready      = false;

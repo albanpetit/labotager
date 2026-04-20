@@ -42,7 +42,8 @@ static bool     hw_error_rtc_displayed    = false;
 static bool     prev_aht20_error          = false;
 static bool     prev_rtc_error            = false;
 static uint32_t diag_until_ms     = 0;
-static const uint32_t DIAG_DURATION_MS = 3000;
+static const uint32_t DIAG_DURATION_MS  = 3000;
+static const uint32_t HOME_REFRESH_MS   = 60000;   // periodic live-data refresh on Home screen
 
 // ─── Staged date/time (edited in Settings, applied to RTC on confirm) ─────────
 
@@ -416,18 +417,18 @@ static void render_params(const Settings &s) {
 static void render_hw_error(const char *title) {
   tft.fillScreen(TFT_WHITE);
   ui_draw_icon_error();
-  tft.fillRect(0, 0, SCREEN_W, 52, 0xC000);
-  tft.setTextColor(TFT_WHITE, 0xC000);
+  tft.fillRect(0, 0, SCREEN_W, UI_ERROR_BANNER_H, UI_COLOR_ERROR_BG);
+  tft.setTextColor(TFT_WHITE, UI_COLOR_ERROR_BG);
   tft.setTextDatum(MC_DATUM);
   tft.setTextSize(UI_FONT_SIZE);
-  tft.drawString(title, SCREEN_W / 2, 26);
+  tft.drawString(title, SCREEN_W / 2, UI_ERROR_BANNER_H / 2);
 }
 
 static void render_hw_error_footer(const char *msg) {
   tft.setTextSize(UI_FONT_SIZE);
   tft.setTextColor(TFT_BLACK, TFT_WHITE);
   tft.drawString(msg, SCREEN_W / 2, 172);
-  tft.setTextColor(0x8410, TFT_WHITE);
+  tft.setTextColor(UI_COLOR_HINT, TFT_WHITE);
   tft.drawString("Appuyer pour continuer", SCREEN_W / 2, 200);
 }
 
@@ -545,7 +546,7 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
   // Details screen: full redraw (all rows are dynamic data).
   if ((ui_mode == MODE_TAB || ui_mode == MODE_DETAILS_SCROLL) &&
       current_tab != SCREEN_PARAMS &&
-      millis() - last_refresh_ms >= 60000UL) {
+      millis() - last_refresh_ms >= HOME_REFRESH_MS) {
     last_refresh_ms = millis();
     if (current_tab == SCREEN_HOME) {
       render_home_update(data, settings);

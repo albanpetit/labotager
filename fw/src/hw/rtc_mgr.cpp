@@ -7,6 +7,9 @@
 // Shared I2C bus (defined in main.cpp)
 extern MbedI2C rtcWire;
 
+// RTC update interval
+#define RTC_READ_INTERVAL_MS  1000   // minimum time between successive getNowTime() calls (ms)
+
 // DS3231M register addresses (datasheet section 8.2)
 #define DS3231_REG_SECONDS   0x00   // start of time registers (seconds … year)
 #define DS3231_REG_DOW       0x03   // day-of-week register (unused, written as 1)
@@ -51,7 +54,7 @@ void rtc_update(SensorData &data) {
 
   static uint32_t last_read = 0;
   uint32_t now = millis();
-  if (now - last_read < 1000) return;
+  if (now - last_read < RTC_READ_INTERVAL_MS) return;
   last_read = now;
 
   rtc.getNowTime();
