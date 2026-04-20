@@ -43,12 +43,15 @@ static bool     prev_aht20_error          = false;
 static bool     prev_rtc_error            = false;
 static uint32_t diag_until_ms     = 0;
 static const uint32_t DIAG_DURATION_MS  = 3000;
-static const uint32_t HOME_REFRESH_MS   = 60000;   // periodic live-data refresh on Home screen
+static const uint32_t LIVE_REFRESH_MS   = 60000;   // periodic live-data refresh (Home: partial, Details: full)
 
 // ─── List row layout (Details and Settings share the same item dimensions) ────
 #define LIST_TEXT_X_LEFT    50   // x of the left-aligned label inside a list item
 #define LIST_TEXT_X_RIGHT  265   // x of the right-aligned value inside a list item
 #define LIST_TEXT_Y_OFFSET  13   // vertical offset from item top to text baseline
+#define LIST_ITEM_Y0        62   // y of the first visible item slot
+#define LIST_ITEM_STEP      34   // vertical spacing between items (px)
+#define LIST_ITEMS_SHOWN     3   // number of visible rows at a time
 
 // ─── Hardware error screen layout ─────────────────────────────────────────────
 #define HW_ERROR_MSG_Y     172   // y of the device-specific message on error screens
@@ -136,6 +139,11 @@ static int get_param_val(int i, const Settings &s) {
   }
 }
 
+static void apply_time_delta(int sub, uint8_t &h, uint8_t &m, int delta) {
+  if (sub == 0) h = (uint8_t)constrain((int)h + delta, 0, 23);
+  else          m = (uint8_t)constrain((int)m + delta, 0, 59);
+}
+
 static void apply_date_delta(int sub, uint8_t &d, uint8_t &mo, uint16_t &yr, int delta) {
   if      (sub == 0) d  = (uint8_t) constrain((int)d  + delta, 1, 31);
   else if (sub == 1) mo = (uint8_t) constrain((int)mo + delta, 1, 12);
@@ -145,8 +153,7 @@ static void apply_date_delta(int sub, uint8_t &d, uint8_t &mo, uint16_t &yr, int
 static void apply_delta(int i, int delta, Settings &s) {
   switch (i) {
     case PARAM_TIME:  // combined HH:MM
-      if (param_edit_sub_idx == 0) stg_hour = (uint8_t)constrain((int)stg_hour + delta, 0, 23);
-      else                     stg_min  = (uint8_t)constrain((int)stg_min  + delta, 0, 59);
+      apply_time_delta(param_edit_sub_idx, stg_hour, stg_min, delta);
       stg_rtc_dirty = true; break;
     case PARAM_DATE:  // combined DD/MM/YYYY
       apply_date_delta(param_edit_sub_idx, stg_day, stg_month, stg_year, delta);
@@ -155,12 +162,10 @@ static void apply_delta(int i, int delta, Settings &s) {
       apply_date_delta(param_edit_sub_idx, s.grow_start_day, s.grow_start_month, s.grow_start_year, delta);
       settings_dirty = true; break;
     case PARAM_LED_START:  // combined HH:MM
-      if (param_edit_sub_idx == 0) s.led_start_hour = (uint8_t)constrain((int)s.led_start_hour + delta, 0, 23);
-      else                     s.led_start_min  = (uint8_t)constrain((int)s.led_start_min  + delta, 0, 59);
+      apply_time_delta(param_edit_sub_idx, s.led_start_hour, s.led_start_min, delta);
       settings_dirty = true; break;
     case PARAM_LED_END: {  // combined HH:MM — cannot equal the start time
-      if (param_edit_sub_idx == 0) s.led_end_hour = (uint8_t)constrain((int)s.led_end_hour + delta, 0, 23);
-      else                     s.led_end_min  = (uint8_t)constrain((int)s.led_end_min  + delta, 0, 59);
+      apply_time_delta(param_edit_sub_idx, s.led_end_hour, s.led_end_min, delta);
       // If start == end, nudge end one extra minute in the same direction
       if (s.led_end_hour == s.led_start_hour && s.led_end_min == s.led_start_min) {
         uint16_t end_min = minutes_since_midnight(s.led_end_hour, s.led_end_min);
@@ -310,10 +315,8 @@ static void render_home(const SensorData &data, const Settings &settings) {
 // Encoder UP/DOWN moves cursor; LONG_PRESS returns to tab navigation.
 // Item backgrounds: details_item (normal) / details_item_selected (highlighted).
 
-#define DETAILS_ITEM_COUNT  6
-#define DETAILS_ITEMS_SHOWN 3
-#define DETAILS_ITEM_Y0     62    // y of first visible item slot
-#define DETAILS_ITEM_STEP   34    // vertical spacing between items (px)
+#define DETAILS_ITEM_COUNT    6
+#define DETAIL_VAL_BUF_LEN   24   // fits longest formatted value ("31/12 23:59\0" = 12 chars, padded to 24)
 
 enum DetailIndex {
   DETAIL_TEMP     = 0,
@@ -372,11 +375,11 @@ static void render_row_text(int y, const char *label, const char *val, uint16_t 
 }
 
 static void render_details_row(int item_idx, int slot, bool selected, const SensorData &data) {
-  int y = DETAILS_ITEM_Y0 + slot * DETAILS_ITEM_STEP;
+  int y = LIST_ITEM_Y0 + slot * LIST_ITEM_STEP;
   if (selected) ui_draw_details_item_selected(y);
   else          ui_draw_details_item(y);
 
-  char val[24];
+  char val[DETAIL_VAL_BUF_LEN];
   get_detail_value(item_idx, data, val, sizeof(val));
   render_row_text(y, DETAIL_LABELS[item_idx], val, UI_COLOR_TEXT);
 }
@@ -386,7 +389,7 @@ static void render_details(const SensorData &data) {
   ui_draw_details_background();
   ui_draw_details_title();
 
-  for (int slot = 0; slot < DETAILS_ITEMS_SHOWN; slot++) {
+  for (int slot = 0; slot < LIST_ITEMS_SHOWN; slot++) {
     int item = details_scroll + slot;
     if (item >= DETAILS_ITEM_COUNT) break;
     render_details_row(item, slot, item == details_cursor, data);
@@ -395,15 +398,12 @@ static void render_details(const SensorData &data) {
 
 // ─── Screen: Settings ─────────────────────────────────────────────────────────
 //
-// Scrollable list — 10 items total, 3 visible at a time.
+// Scrollable list — 8 items total, 3 visible at a time.
 // Matches the details page layout: same images, same scroll logic.
 
-#define PARAMS_ITEMS_SHOWN  3
-#define PARAMS_ITEM_Y0      62
-#define PARAMS_ITEM_STEP    34
 
 static void render_param_row(int item_idx, int slot, bool selected, bool editing, const Settings &s) {
-  int y = PARAMS_ITEM_Y0 + slot * PARAMS_ITEM_STEP;
+  int y = LIST_ITEM_Y0 + slot * LIST_ITEM_STEP;
   if (selected) ui_draw_params_item_selected(y);
   else          ui_draw_params_item(y);
 
@@ -417,8 +417,8 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
       // DD/MM/YYYY — source depends on which row we're rendering
       uint8_t  d  = (item_idx == PARAM_DATE) ? stg_day          : s.grow_start_day;
       uint8_t  mo = (item_idx == PARAM_DATE) ? stg_month        : s.grow_start_month;
-      uint16_t y  = (item_idx == PARAM_DATE) ? stg_year         : s.grow_start_year;
-      snprintf(val, sizeof(val), "%02d/%02d/%04d", d, mo, y);
+      uint16_t yr = (item_idx == PARAM_DATE) ? stg_year         : s.grow_start_year;
+      snprintf(val, sizeof(val), "%02d/%02d/%04d", d, mo, yr);
       if (editing) {
         const char *sub_names[] = { "d", "m", "y" };
         snprintf(label, sizeof(label), "%s (%s)", PARAM_LABELS[item_idx], sub_names[param_edit_sub_idx]);
@@ -448,7 +448,7 @@ static void render_params(const Settings &s) {
   ui_draw_params_background();
   ui_draw_params_title(stg_rtc_dirty);
 
-  for (int slot = 0; slot < PARAMS_ITEMS_SHOWN; slot++) {
+  for (int slot = 0; slot < LIST_ITEMS_SHOWN; slot++) {
     int item = params_scroll + slot;
     if (item >= PARAM_COUNT) break;
     bool selected = (item == param_cursor) && (ui_mode != MODE_TAB);
@@ -594,7 +594,7 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
   // Details screen: full redraw (all rows are dynamic data).
   if ((ui_mode == MODE_TAB || ui_mode == MODE_DETAILS_SCROLL) &&
       current_tab != SCREEN_PARAMS &&
-      millis() - last_refresh_ms >= HOME_REFRESH_MS) {
+      millis() - last_refresh_ms >= LIVE_REFRESH_MS) {
     last_refresh_ms = millis();
     if (current_tab == SCREEN_HOME) {
       render_home_update(data, settings);
@@ -635,7 +635,7 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
         if (ev == ENC_LONG_PRESS) { ui_mode = MODE_TAB; do_render = true; break; }
         int prev_cursor = details_cursor;
         ScrollResult sr = scroll_update(details_cursor, details_scroll,
-                                        ev, DETAILS_ITEM_COUNT, DETAILS_ITEMS_SHOWN);
+                                        ev, DETAILS_ITEM_COUNT, LIST_ITEMS_SHOWN);
         if (sr == SCROLL_WINDOW_SHIFTED) {
           do_render = true;
         } else if (sr == SCROLL_SAME_WINDOW) {
@@ -660,10 +660,10 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
         }
         int prev_cursor = param_cursor;
         ScrollResult sr = scroll_update(param_cursor, params_scroll,
-                                        ev, PARAM_COUNT, PARAMS_ITEMS_SHOWN);
+                                        ev, PARAM_COUNT, LIST_ITEMS_SHOWN);
         if (sr == SCROLL_WINDOW_SHIFTED) {
           // Redraw visible slots only — no background or title repaint
-          for (int slot = 0; slot < PARAMS_ITEMS_SHOWN; slot++) {
+          for (int slot = 0; slot < LIST_ITEMS_SHOWN; slot++) {
             int item = params_scroll + slot;
             if (item >= PARAM_COUNT) break;
             render_param_row(item, slot, item == param_cursor, false, settings);
