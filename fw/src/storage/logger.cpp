@@ -95,6 +95,23 @@ static void load_config(Settings &s) {
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 
+void settings_apply_defaults(Settings &s) {
+  s.soil_threshold   = DEFAULT_SOIL_THRESHOLD;
+  s.plant_temp_min   = DEFAULT_PLANT_TEMP_MIN;
+  s.plant_temp_max   = DEFAULT_PLANT_TEMP_MAX;
+  s.watering_check_s = DEFAULT_WATERING_CHECK_S;
+  s.led_start_hour   = DEFAULT_LED_START_HOUR;
+  s.led_start_min    = DEFAULT_LED_START_MIN;
+  s.led_end_hour     = DEFAULT_LED_END_HOUR;
+  s.led_end_min      = DEFAULT_LED_END_MIN;
+  s.log_interval_s   = DEFAULT_LOG_INTERVAL_S;
+  s.grow_start_day   = 0;
+  s.grow_start_month = 0;
+  s.grow_start_year  = 0;
+  strncpy(s.owner_name, DEFAULT_OWNER_NAME, sizeof(s.owner_name) - 1);
+  s.owner_name[sizeof(s.owner_name) - 1] = '\0';
+}
+
 bool logger_init(Settings &settings) {
   SdSpiConfig cfg(GPIO_SD_CS, DEDICATED_SPI, SD_SCK_MHZ(SD_SPEED_MHZ), &sdSPI);
   if (!sd.begin(cfg)) {

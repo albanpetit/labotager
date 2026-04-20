@@ -1,6 +1,11 @@
 #pragma once
 #include "state.h"
 
+// Apply compile-time defaults to all Settings fields.
+// Call once in setup() before logger_init() so that load_config() can
+// selectively override only the keys present in /config.txt.
+void settings_apply_defaults(Settings &s);
+
 // Initialise la SD, charge /config.txt dans settings.
 // Retourne false si la carte SD est absente ou inaccessible.
 bool logger_init(Settings &settings);

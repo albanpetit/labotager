@@ -35,7 +35,7 @@ static const char * const STAGE_NAMES[] = {
   "logger",      // 5
   "display",     // 6
 };
-#define STAGE_COUNT  7
+static const uint8_t STAGE_COUNT = sizeof(STAGE_NAMES) / sizeof(STAGE_NAMES[0]);
 #define BREADCRUMB_MAGIC  0xAB00   // upper word — confirms the value was written by us
 
 static inline void set_stage(uint8_t stage) {
@@ -49,19 +49,7 @@ void setup() {
   display_init();
 
   // 2. Apply compile-time defaults (overridden by /config.txt if SD is present)
-  settings.soil_threshold     = DEFAULT_SOIL_THRESHOLD;
-  settings.plant_temp_min     = DEFAULT_PLANT_TEMP_MIN;
-  settings.plant_temp_max     = DEFAULT_PLANT_TEMP_MAX;
-  settings.watering_check_s   = DEFAULT_WATERING_CHECK_S;
-  settings.led_start_hour     = DEFAULT_LED_START_HOUR;
-  settings.led_start_min      = DEFAULT_LED_START_MIN;
-  settings.led_end_hour       = DEFAULT_LED_END_HOUR;
-  settings.led_end_min        = DEFAULT_LED_END_MIN;
-  settings.log_interval_s     = DEFAULT_LOG_INTERVAL_S;
-  settings.grow_start_day     = 0;
-  settings.grow_start_month   = 0;
-  settings.grow_start_year    = 0;
-  strncpy(settings.owner_name, DEFAULT_OWNER_NAME, sizeof(settings.owner_name) - 1);
+  settings_apply_defaults(settings);
 
   Serial.begin(SERIAL_BAUD);
   delay(2000);

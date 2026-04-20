@@ -52,7 +52,15 @@ static void enc_poll_cb() {
 
 // ─── Switch — polling state machine ───────────────────────────────────────────
 
-static uint8_t  sw_state   = 0;
+enum SwState {
+  SW_IDLE,              // waiting for first press
+  SW_DEBOUNCE_PRESS,    // press detected, waiting for bounce to settle
+  SW_HELD,              // confirmed press, waiting for release or long-press timeout
+  SW_DEBOUNCE_RELEASE,  // release detected, waiting for bounce to settle
+  SW_LONG_EMITTED,      // long-press event already fired, waiting for physical release
+};
+
+static SwState  sw_state   = SW_IDLE;
 static uint32_t sw_ts      = 0;
 static uint32_t sw_press_t = 0;
 
@@ -89,27 +97,27 @@ EncEvent encoder_poll() {
   uint32_t now = millis();
 
   switch (sw_state) {
-    case 0:   // idle
-      if (pressed) { sw_state = 1; sw_ts = now; }
+    case SW_IDLE:
+      if (pressed) { sw_state = SW_DEBOUNCE_PRESS; sw_ts = now; }
       break;
 
-    case 1:   // press debounce
-      if (!pressed) { sw_state = 0; break; }
-      if (now - sw_ts >= ENC_SW_DEBOUNCE_MS) { sw_state = 2; sw_press_t = now; }
+    case SW_DEBOUNCE_PRESS:
+      if (!pressed) { sw_state = SW_IDLE; break; }
+      if (now - sw_ts >= ENC_SW_DEBOUNCE_MS) { sw_state = SW_HELD; sw_press_t = now; }
       break;
 
-    case 2:   // held — wait for release or long-press timeout
-      if (!pressed) { sw_state = 3; sw_ts = now; break; }
-      if (now - sw_press_t >= ENC_SW_LONG_MS) { sw_state = 4; return ENC_LONG_PRESS; }
+    case SW_HELD:
+      if (!pressed) { sw_state = SW_DEBOUNCE_RELEASE; sw_ts = now; break; }
+      if (now - sw_press_t >= ENC_SW_LONG_MS) { sw_state = SW_LONG_EMITTED; return ENC_LONG_PRESS; }
       break;
 
-    case 3:   // release debounce
-      if (pressed) { sw_state = 2; break; }
-      if (now - sw_ts >= ENC_SW_DEBOUNCE_MS) { sw_state = 0; return ENC_PRESS; }
+    case SW_DEBOUNCE_RELEASE:
+      if (pressed) { sw_state = SW_HELD; break; }
+      if (now - sw_ts >= ENC_SW_DEBOUNCE_MS) { sw_state = SW_IDLE; return ENC_PRESS; }
       break;
 
-    case 4:   // long-press already emitted — wait for physical release
-      if (!pressed) sw_state = 0;
+    case SW_LONG_EMITTED:
+      if (!pressed) sw_state = SW_IDLE;
       break;
   }
 
