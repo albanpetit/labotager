@@ -7,21 +7,57 @@
 // SD timing constants
 #define SD_RETRY_INTERVAL_MS   5000   // delay before re-attempting SD init after failure (ms)
 #define SD_HEALTH_INTERVAL_MS 10000   // interval between SD card health checks (ms)
-#define CSV_LOG_LINE_LEN         80   // "YYYY-MM-DDTHH:MM:SS,±TTT.TT,HHH.H,SSS,P,L\0" ~44 chars; 80 gives margin
+#define CSV_LOG_LINE_LEN         80   // "N,DD/MM/YYYY,HH:MM:SS,GGGG,±TT.TT,HHH.H,SSS,DDDD\0" ~58 chars; 80 gives margin
 
 // SPI1 hardware — pins defined in config.h
-static MbedSPI sdSPI(GPIO_SD_MISO, GPIO_SD_MOSI, GPIO_SD_SCK);
-static SdFat32  sd;
-static bool     sd_ready = false;
+static MbedSPI   sdSPI(GPIO_SD_MISO, GPIO_SD_MOSI, GPIO_SD_SCK);
+static SdFat32   sd;
+static bool      sd_ready = false;
+static uint32_t  log_id   = 0;   // row counter — resumed from file at boot, incremented on each write
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Count existing data rows in LOG_FILE (excludes header line).
+// Called once at init so log_id continues from where the last session left off.
+static uint32_t count_log_rows() {
+  File32 f = sd.open(LOG_FILE, O_RDONLY);
+  if (!f) return 0;
+  uint32_t newlines = 0;
+  while (f.available()) {
+    if ((char)f.read() == '\n') newlines++;
+  }
+  f.close();
+  return newlines > 0 ? newlines - 1 : 0;   // subtract header line
+}
+
+// Julian Day Number — Fliegel & Van Flandern integer formula (CACM vol.11, 1968).
+static int32_t logger_julian_day(int d, int m, int y) {
+  return 367L*y - 7*(y+(m+9)/12)/4 + 275*m/9 + d + 1721013L;
+}
+
+// Days elapsed since grow start. Returns 0 if grow date is not set or RTC is unavailable.
+static int32_t grow_day_number(const SensorData &data, const Settings &s) {
+  if (s.grow_start_day == 0 || !data.rtc_ready) return 0;
+  int32_t diff = logger_julian_day(data.day, data.month, data.year)
+               - logger_julian_day(s.grow_start_day, s.grow_start_month, s.grow_start_year);
+  return diff < 0 ? 0 : diff;
+}
+
+// Scheduled daily LED-on duration in minutes derived from the lighting window.
+static uint16_t led_daily_duration_min(const Settings &s) {
+  uint16_t start = (uint16_t)s.led_start_hour * 60u + s.led_start_min;
+  uint16_t end   = (uint16_t)s.led_end_hour   * 60u + s.led_end_min;
+  if (start == end) return 0;
+  return (end > start) ? (uint16_t)(end - start)
+                       : (uint16_t)(MINUTES_PER_DAY - start + end);
+}
 
 static void ensure_log_structure() {
   if (!sd.exists(LOG_DIR)) sd.mkdir(LOG_DIR);
   if (!sd.exists(LOG_FILE)) {
     File32 f = sd.open(LOG_FILE, O_WRONLY | O_CREAT);
     if (f) {
-      f.println("datetime,air_temp_c,air_hum_pct,soil_pct,pump,led");
+      f.println("id,date,heure,jour_croissance,temp_air_c,hum_air_pct,hum_sol_pct,duree_eclairage_min");
       f.close();
     }
   }
@@ -124,6 +160,7 @@ bool logger_init(Settings &settings) {
 
   ensure_log_structure();
   load_config(settings);
+  log_id = count_log_rows();   // resume row counter so IDs are unique across reboots
   return true;
 }
 
@@ -185,13 +222,14 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
 
   char buf[CSV_LOG_LINE_LEN];
   snprintf(buf, sizeof(buf),
-      "%04d-%02d-%02dT%02d:%02d:%02d,%.2f,%.1f,%d,%d,%d",
-      data.year, data.month, data.day,
+      "%lu,%02d/%02d/%04d,%02d:%02d:%02d,%ld,%.2f,%.1f,%d,%u",
+      (unsigned long)++log_id,
+      data.day, data.month, data.year,
       data.hour, data.minute, data.second,
+      (long)grow_day_number(data, settings),
       data.air_temp, data.air_humidity,
       data.soil_pct,
-      data.pump_on ? 1 : 0,
-      data.led_on  ? 1 : 0);
+      (unsigned)led_daily_duration_min(settings));
   f.println(buf);
   f.close();
 
