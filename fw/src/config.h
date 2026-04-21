@@ -39,7 +39,7 @@
 #define DEFAULT_LED_START_MIN       0
 #define DEFAULT_LED_END_HOUR       22   // grow light off (22:00)
 #define DEFAULT_LED_END_MIN         0
-#define DEFAULT_LOG_INTERVAL_S    3600  // seconds between CSV log entries
+#define DEFAULT_LOG_INTERVAL_S   10800  // seconds between CSV log entries (3 h)
 #define DEFAULT_OWNER_NAME    "La Machinerie"
 
 // ─── Plant status thresholds (defaults — overridden at runtime via Settings) ──
