@@ -29,9 +29,10 @@ static int     params_scroll    = 0;
 static int     details_cursor   = 0;
 static int     details_scroll   = 0;
 static bool    settings_dirty   = false;
-static bool    need_full_redraw = true;
-static uint32_t last_refresh_ms = 0;
-static bool    sd_error_shown    = false;
+static bool     need_full_redraw        = true;
+static uint32_t last_refresh_ms         = 0;
+static uint32_t last_details_refresh_ms = 0;
+static bool     sd_error_shown          = false;
 
 // Hardware diagnostic screens — re-triggered each time an error (re)appears.
 // The _displayed flags prevent re-showing while the error is still active.
@@ -42,8 +43,9 @@ static bool     hw_error_rtc_displayed    = false;
 static bool     prev_aht20_error          = false;
 static bool     prev_rtc_error            = false;
 static uint32_t diag_until_ms     = 0;
-static const uint32_t DIAG_DURATION_MS  = 3000;
-static const uint32_t LIVE_REFRESH_MS   = 60000;   // periodic live-data refresh (Home: partial, Details: full)
+static const uint32_t DIAG_DURATION_MS    = 3000;
+static const uint32_t LIVE_REFRESH_MS     = 60000;   // Home partial widget refresh (ms)
+static const uint32_t DETAILS_REFRESH_MS  =  1000;   // Details full row refresh (ms)
 
 // ─── List row layout (Details and Settings share the same item dimensions) ────
 #define LIST_TEXT_X_LEFT    50   // x of the left-aligned label inside a list item
@@ -596,16 +598,23 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
   }
 
   // ── Periodic refresh for live data ───────────────────────────────────────
-  // Home screen: partial update (widgets only — no background or tabbar redraw).
-  // Details screen: full redraw (all rows are dynamic data).
-  if ((ui_mode == MODE_TAB || ui_mode == MODE_DETAILS_SCROLL) &&
-      current_tab != SCREEN_PARAMS &&
+  // Home: partial widget update only (no background repaint), every 60 s.
+  if (ui_mode == MODE_TAB && current_tab == SCREEN_HOME &&
       millis() - last_refresh_ms >= LIVE_REFRESH_MS) {
     last_refresh_ms = millis();
-    if (current_tab == SCREEN_HOME) {
-      render_home_update(data, settings);
-    } else {
-      do_render = true;
+    render_home_update(data, settings);
+  }
+  // Details: redraw each visible row at 1 Hz so sensor values and actuator
+  // states stay current. Only the item background + text are redrawn —
+  // the global background and title are left untouched to avoid flicker.
+  if ((ui_mode == MODE_TAB || ui_mode == MODE_DETAILS_SCROLL) &&
+      current_tab == SCREEN_DETAILS &&
+      millis() - last_details_refresh_ms >= DETAILS_REFRESH_MS) {
+    last_details_refresh_ms = millis();
+    for (int slot = 0; slot < LIST_ITEMS_SHOWN; slot++) {
+      int item = details_scroll + slot;
+      if (item >= DETAILS_ITEM_COUNT) break;
+      render_details_row(item, slot, item == details_cursor, data);
     }
   }
 
@@ -703,7 +712,8 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
   // render_tabbar() is called AFTER content so ui_draw_background() (320×240)
   // cannot overwrite the tab bar.
   if (do_render) {
-    last_refresh_ms = millis();
+    last_refresh_ms         = millis();
+    last_details_refresh_ms = millis();
     switch (current_tab) {
       case SCREEN_HOME:    render_home(data, settings);  break;
       case SCREEN_DETAILS: render_details(data);         break;
