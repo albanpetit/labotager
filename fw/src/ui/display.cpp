@@ -274,7 +274,8 @@ static PlantState plant_get_state(const SensorData &data, const Settings &settin
 //   Y=168 : grow-days counter        (centered, size 1)
 
 // Redraw only the four live widgets — no background, no owner name, no tabbar.
-// Called every minute from the periodic timer when SCREEN_HOME is active.
+// Called from render_home() on full render, and directly by the periodic timer
+// (LIVE_REFRESH_MS) for partial updates without a full background repaint.
 static void render_home_update(const SensorData &data, const Settings &settings) {
   char buf[32];
 
@@ -425,7 +426,7 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
       }
     } else {
       // PARAM_TIME, PARAM_LED_START, PARAM_LED_END: HH:MM
-      int h, m;
+      int h = 0, m = 0;
       if      (item_idx == PARAM_TIME)      { h = stg_hour;          m = stg_min;          }
       else if (item_idx == PARAM_LED_START) { h = s.led_start_hour;  m = s.led_start_min;  }
       else                                  { h = s.led_end_hour;     m = s.led_end_min;    }
@@ -472,19 +473,24 @@ static void render_hw_error(const char *title) {
   tft.drawString(title, SCREEN_W / 2, UI_ERROR_BANNER_H / 2);
 }
 
-static void render_hw_error_footer(const char *msg) {
+// Draw the device-specific message line, explicitly fixing the text datum so
+// callers do not rely on MC_DATUM being left set by render_hw_error().
+static void render_hw_error_msg(const char *msg) {
+  tft.setTextDatum(MC_DATUM);
   tft.setTextSize(UI_FONT_SIZE);
   tft.setTextColor(TFT_BLACK, TFT_WHITE);
   tft.drawString(msg, SCREEN_W / 2, HW_ERROR_MSG_Y);
+}
+
+static void render_hw_error_footer(const char *msg) {
+  render_hw_error_msg(msg);
   tft.setTextColor(UI_COLOR_HINT, TFT_WHITE);
   tft.drawString("Appuyer pour continuer", SCREEN_W / 2, HW_ERROR_HINT_Y);
 }
 
 static void render_sd_error() {
   render_hw_error("ERREUR CARTE SD");
-  tft.setTextSize(UI_FONT_SIZE);
-  tft.setTextColor(TFT_BLACK, TFT_WHITE);
-  tft.drawString("Carte SD absente ou inaccessible.", SCREEN_W / 2, HW_ERROR_MSG_Y);
+  render_hw_error_msg("Carte SD absente ou inaccessible.");
 }
 
 static void render_aht20_error() {

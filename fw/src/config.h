@@ -70,7 +70,7 @@ static inline uint16_t minutes_since_midnight(uint8_t h, uint8_t m) {
 #define ENC_DETENT_TRANSITIONS  4   // quadrature transitions per mechanical detent (PEC12R)
 
 // ─── Miscellaneous ────────────────────────────────────────────────────────────
-#define MAX_IMAGE_WIDTH   320
+#define MAX_IMAGE_WIDTH   SCREEN_W   // PNG row buffer in ui.cpp — tied to screen width
 #define SERIAL_BAUD       115200
 
 // ─── Watchdog ─────────────────────────────────────────────────────────────────
