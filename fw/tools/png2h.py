@@ -43,6 +43,7 @@ After conversion, replace the PNG-based draw calls with direct pushImage calls:
 """
 
 import argparse
+import glob
 import os
 import sys
 from pathlib import Path
@@ -203,8 +204,15 @@ def main():
 
     opaque_set = {n.lower().replace('-', '_') for n in args.opaque_list}
 
+    # Expand glob patterns explicitly — required on Windows where PowerShell
+    # does not expand wildcards for external (non-native) commands.
+    expanded_inputs = []
+    for pattern in args.inputs:
+        matches = glob.glob(pattern)
+        expanded_inputs.extend(matches if matches else [pattern])
+
     errors = 0
-    for raw_path in args.inputs:
+    for raw_path in expanded_inputs:
         inp = Path(raw_path)
         if not inp.is_file():
             print(f'ERROR: not found: {inp}', file=sys.stderr)

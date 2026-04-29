@@ -63,7 +63,7 @@ python tools\png2h.py ma_photo.png `
   --output-dir src\ui\components
 
 # Tous les composants d'un dossier
-python tools\png2h.py (Get-Item src\ui\components\*.png) `
+python tools\png2h.py src\ui\components\*.png `
   --opaque-list background `
   --output-dir src\ui\components
 
