@@ -36,7 +36,7 @@ static const char * const STAGE_NAMES[] = {
   "display",     // 6
 };
 static const uint8_t STAGE_COUNT = sizeof(STAGE_NAMES) / sizeof(STAGE_NAMES[0]);
-#define BREADCRUMB_MAGIC  0xAB00   // upper word — confirms the value was written by us
+#define BREADCRUMB_MAGIC  0xAB00   // bits 15:8 — confirms the value was written by us
 
 static inline void set_stage(uint8_t stage) {
   watchdog_hw->scratch[0] = BREADCRUMB_MAGIC | stage;

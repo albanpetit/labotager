@@ -17,17 +17,48 @@ static uint32_t  log_id   = 0;   // row counter — resumed from file at boot, i
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Count existing data rows in LOG_FILE (excludes header line).
-// Called once at init so log_id continues from where the last session left off.
-static uint32_t count_log_rows() {
+// Read the ID from the last data row in LOG_FILE.
+// O(1): seeks to the tail of the file rather than reading every byte.
+// Called at init and on SD reconnect so log_id resumes across reboots.
+static const uint16_t LOG_TAIL_LEN = 128;
+
+static uint32_t read_last_log_id() {
   File32 f = sd.open(LOG_FILE, O_RDONLY);
   if (!f) return 0;
-  uint32_t newlines = 0;
-  while (f.available()) {
-    if ((char)f.read() == '\n') newlines++;
-  }
+  uint32_t fsize = f.fileSize();
+  if (fsize == 0) { f.close(); return 0; }
+
+  uint32_t seek_pos = (fsize > LOG_TAIL_LEN) ? fsize - LOG_TAIL_LEN : 0;
+  if (!f.seekSet(seek_pos)) { f.close(); return 0; }
+
+  char buf[LOG_TAIL_LEN + 1];
+  int got = (int)f.read(buf, LOG_TAIL_LEN);
   f.close();
-  return newlines > 0 ? newlines - 1 : 0;   // subtract header line
+  if (got <= 0) return 0;
+  buf[got] = '\0';
+
+  // Strip trailing CR/LF
+  int end = got - 1;
+  while (end >= 0 && (buf[end] == '\n' || buf[end] == '\r')) end--;
+  if (end < 0) return 0;
+  buf[end + 1] = '\0';
+
+  // Find start of the last line
+  char *line = buf;
+  for (int i = end; i >= 0; i--) {
+    if (buf[i] == '\n') { line = &buf[i + 1]; break; }
+  }
+
+  // The header row starts with "id," — no data rows yet
+  if (strncmp(line, "id,", 3) == 0) return 0;
+
+  char *comma = strchr(line, ',');
+  if (!comma) return 0;
+  *comma = '\0';
+  char *endptr;
+  long id = strtol(line, &endptr, 10);
+  if (endptr == line || id <= 0) return 0;
+  return (uint32_t)id;
 }
 
 // Julian Day Number — Fliegel & Van Flandern integer formula (CACM vol.11, 1968).
@@ -100,9 +131,12 @@ static void load_config(Settings &s) {
 
     char *eq = strchr(line, '=');
     if (!eq) continue;
-    *eq        = '\0';
+    *eq             = '\0';
     const char *key = line;
-    int         val = atoi(eq + 1);
+    char       *endptr;
+    long        val_long = strtol(eq + 1, &endptr, 10);
+    if (endptr == eq + 1) continue;   // no valid digits — skip malformed line
+    int val = (int)val_long;
 
     if      (strcmp(key, "soil_threshold")    == 0) s.soil_threshold = (uint8_t)val;
     else if (strcmp(key, "plant_temp_min")    == 0) s.plant_temp_min = (int8_t)val;
@@ -160,7 +194,7 @@ bool logger_init(Settings &settings) {
 
   ensure_log_structure();
   load_config(settings);
-  log_id = count_log_rows();   // resume row counter so IDs are unique across reboots
+  log_id = read_last_log_id();   // resume row counter so IDs are unique across reboots
   return true;
 }
 
@@ -183,6 +217,7 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
         sd_ready      = true;
         data.sd_error = false;
         ensure_log_structure();
+        log_id = read_last_log_id();
        }
     }
     return;
@@ -204,9 +239,14 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
 
   // ── Periodic CSV write ────────────────────────────────────────────────────
   static uint32_t last_log_ms = 0;
+  static bool     first_write = true;
   now = millis();
-  if (now - last_log_ms < (uint32_t)settings.log_interval_s * 1000UL) return;
+  if (!first_write && now - last_log_ms < (uint32_t)settings.log_interval_s * 1000UL) return;
+  first_write = false;
   last_log_ms = now;
+
+  // Require a valid RTC timestamp — a row with no date is useless.
+  if (!data.rtc_ready) return;
 
   // Kick the watchdog before the SD write — a slow card can block for ~1-2 s
   // which, combined with other loop work, risks approaching the 8 s timeout.
@@ -221,16 +261,28 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
   }
 
   char buf[CSV_LOG_LINE_LEN];
-  snprintf(buf, sizeof(buf),
-      "%lu,%02d/%02d/%04d,%02d:%02d:%02d,%ld,%.2f,%.1f,%d,%u",
-      (unsigned long)++log_id,
-      data.day, data.month, data.year,
-      data.hour, data.minute, data.second,
-      (long)grow_day_number(data, settings),
-      data.air_temp, data.air_humidity,
-      data.soil_pct,
-      (unsigned)led_daily_duration_min(settings));
-  f.println(buf);
+  if (data.aht20_ready) {
+    snprintf(buf, sizeof(buf),
+        "%lu,%02d/%02d/%04d,%02d:%02d:%02d,%ld,%.2f,%.1f,%d,%u",
+        (unsigned long)++log_id,
+        data.day, data.month, data.year,
+        data.hour, data.minute, data.second,
+        (long)grow_day_number(data, settings),
+        data.air_temp, data.air_humidity,
+        data.soil_pct,
+        (unsigned)led_daily_duration_min(settings));
+  } else {
+    snprintf(buf, sizeof(buf),
+        "%lu,%02d/%02d/%04d,%02d:%02d:%02d,%ld,,,%d,%u",
+        (unsigned long)++log_id,
+        data.day, data.month, data.year,
+        data.hour, data.minute, data.second,
+        (long)grow_day_number(data, settings),
+        data.soil_pct,
+        (unsigned)led_daily_duration_min(settings));
+  }
+  f.print(buf);
+  f.print('\n');
   f.close();
 
   data.last_save_hour  = data.hour;
@@ -279,6 +331,7 @@ void logger_save_settings(const Settings &s, void (*kick_wdt)()) {
   sd.remove(CONFIG_FILE);
   if (!sd.rename(TMP_FILE, CONFIG_FILE)) {
     if (Serial) Serial.println("[SD] Failed to rename temp config to " CONFIG_FILE);
+    sd.remove(TMP_FILE);
     return;
   }
 

@@ -18,6 +18,7 @@ extern MbedI2C rtcWire;
 //   permanently disabled for this boot — the DS3231M continues unaffected.
 
 #define AHT20_MAX_FAILURES      3
+#define AHT20_RETRY_MS      30000   // re-detection interval after disable (ms)
 
 // AHT20 I2C command bytes (datasheet section 5.4)
 #define AHT20_CMD_INIT          0xBE   // initialisation / calibration command
@@ -122,7 +123,18 @@ void sensors_update(SensorData &data) {
   // ── AHT20 non-blocking measurement cycle (every 2 s) ─────────────────────
   // Skip entirely if the sensor has been disabled due to repeated I2C failures.
   data.aht20_error = aht_disabled;
-  if (aht_disabled) return;
+  if (aht_disabled) {
+    static uint32_t last_retry = 0;
+    if (now - last_retry >= AHT20_RETRY_MS) {
+      last_retry = now;
+      if (aht20_detect_and_init()) {
+        aht_disabled     = false;
+        aht_fail_count   = 0;
+        data.aht20_error = false;
+      }
+    }
+    if (aht_disabled) return;
+  }
 
   if (aht_state == AHT_IDLE) {
     if (now - aht_last_cycle >= AHT20_CYCLE_MS) {

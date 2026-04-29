@@ -46,6 +46,7 @@ static uint32_t diag_until_ms     = 0;
 static const uint32_t DIAG_DURATION_MS    = 3000;
 static const uint32_t LIVE_REFRESH_MS     = 60000;   // Home partial widget refresh (ms)
 static const uint32_t DETAILS_REFRESH_MS  =  1000;   // Details full row refresh (ms)
+static const int      TAB_COUNT           =     3;   // number of top-level screens (Home, Details, Settings)
 
 // ─── List row layout (Details and Settings share the same item dimensions) ────
 #define LIST_TEXT_X_LEFT    50   // x of the left-aligned label inside a list item
@@ -626,7 +627,7 @@ bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
       case MODE_TAB:
         if (ev == ENC_UP || ev == ENC_DOWN) {
           int dir = (ev == ENC_UP) ? 1 : -1;
-          current_tab = (Screen)(((int)current_tab + dir + 3) % 3);
+          current_tab = (Screen)(((int)current_tab + dir + TAB_COUNT) % TAB_COUNT);
           if (current_tab == SCREEN_PARAMS) init_staged(data);
           do_render = true;
         } else if (ev == ENC_PRESS && current_tab == SCREEN_DETAILS) {
