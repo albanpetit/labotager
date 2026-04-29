@@ -8,7 +8,9 @@ Outils de développement pour le firmware Labotager.
 
 Convertit des images PNG/JPG en tableaux `uint16_t` PROGMEM compatibles avec TFT_eSPI (`setSwapBytes(false)`), avec masque alpha optionnel.
 
-### Setup
+### macOS / Linux
+
+Setup :
 
 ```bash
 python3 -m venv tools/.venv
@@ -16,7 +18,7 @@ source tools/.venv/bin/activate
 pip install -r tools/requirements.txt
 ```
 
-### Utilisation
+Utilisation :
 
 ```bash
 # Background plein écran — opaque, redimensionné à 320×240
@@ -31,6 +33,42 @@ python3 tools/png2h.py src/ui/components/*.png \
 
 # Fichier unique (masque auto-détecté si alpha présent)
 python3 tools/png2h.py src/ui/components/home_date.png
+
+# Désactiver le venv
+deactivate
+```
+
+### Windows (PowerShell)
+
+> Si PowerShell bloque l'activation (`scripts disabled`), exécuter d'abord :
+>
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+> ```
+
+Setup :
+
+```powershell
+python -m venv tools\.venv
+tools\.venv\Scripts\Activate.ps1
+pip install -r tools\requirements.txt
+```
+
+Utilisation :
+
+```powershell
+# Background plein écran — opaque, redimensionné à 320×240
+python tools\png2h.py ma_photo.png `
+  --resize 320 240 --opaque `
+  --output-dir src\ui\components
+
+# Tous les composants d'un dossier
+python tools\png2h.py (Get-Item src\ui\components\*.png) `
+  --opaque-list background `
+  --output-dir src\ui\components
+
+# Fichier unique
+python tools\png2h.py src\ui\components\home_date.png
 
 # Désactiver le venv
 deactivate
