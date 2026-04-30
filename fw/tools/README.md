@@ -22,7 +22,7 @@ Utilisation :
 
 ```bash
 # Background plein écran — opaque, redimensionné à 320×240
-python3 tools/png2h.py ma_photo.png \
+python3 tools/png2h.py tools/images/ma_photo.png \
   --resize 320 240 --opaque \
   --output-dir src/ui/components
 
@@ -32,7 +32,7 @@ python3 tools/png2h.py tools/images/*.png \
   --output-dir src/ui/components
 
 # Fichier unique (masque auto-détecté si alpha présent)
-python3 tools/png2h.py src/ui/components/home_date.png
+python3 tools/png2h.py tools/images/home_date.png
 
 # Désactiver le venv
 deactivate
@@ -68,7 +68,7 @@ python tools\png2h.py tools\images\*.png `
   --output-dir src\ui\components
 
 # Fichier unique
-python tools\png2h.py src\ui\components\home_date.png
+python tools\png2h.py tools\images\home_date.png
 
 # Désactiver le venv
 deactivate
