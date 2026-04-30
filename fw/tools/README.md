@@ -27,7 +27,7 @@ python3 tools/png2h.py ma_photo.png \
   --output-dir src/ui/components
 
 # Tous les composants d'un dossier (background sans masque, reste avec masque)
-python3 tools/png2h.py src/ui/components/*.png \
+python3 tools/png2h.py tools/images/*.png \
   --opaque-list background \
   --output-dir src/ui/components
 
@@ -63,7 +63,7 @@ python tools\png2h.py ma_photo.png `
   --output-dir src\ui\components
 
 # Tous les composants d'un dossier
-python tools\png2h.py src\ui\components\*.png `
+python tools\png2h.py tools\images\*.png `
   --opaque-list background `
   --output-dir src\ui\components
 
