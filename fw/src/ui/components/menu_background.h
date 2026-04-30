@@ -11,6 +11,8 @@
 
 #define MENU_BACKGROUND_W  320
 #define MENU_BACKGROUND_H  39
+static constexpr int16_t menu_background_W = 320;
+static constexpr int16_t menu_background_H = 39;
 
 // 320×39 pixels · 24960 bytes
 static const uint16_t menu_background[] PROGMEM = {

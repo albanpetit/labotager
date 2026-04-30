@@ -17,11 +17,6 @@
 // Provides the shared TFT instance to the UI rendering layer.
 void ui_init(TFT_eSPI &tft);
 
-// Draw any PROGMEM PNG byte array at screen position (x, y).
-// opaque=true forces pushImageDMA for every pixel (no alpha mask), useful for
-// background images where transparent areas must never reveal stale content.
-void ui_draw_png(const uint8_t *data, size_t len, int16_t x, int16_t y, bool opaque = false);
-
 // ─── Component draw functions ─────────────────────────────────────────────────
 // One function per header in components/. Add entries here as new PNG assets
 // are converted and placed in src/ui/components/.

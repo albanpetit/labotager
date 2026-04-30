@@ -11,6 +11,8 @@
 
 #define PARAMS_BACKGROUND_W  278
 #define PARAMS_BACKGROUND_H  169
+static constexpr int16_t params_background_W = 278;
+static constexpr int16_t params_background_H = 169;
 
 // 278×169 pixels · 93964 bytes
 static const uint16_t params_background[] PROGMEM = {

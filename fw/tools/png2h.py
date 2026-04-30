@@ -142,7 +142,9 @@ def convert(input_path: Path, output_path: Path, var_name: str,
         f.write(f'#pragma once\n')
         f.write(f'#include <Arduino.h>\n\n')
         f.write(f'#define {var_name.upper()}_W  {width}\n')
-        f.write(f'#define {var_name.upper()}_H  {height}\n\n')
+        f.write(f'#define {var_name.upper()}_H  {height}\n')
+        f.write(f'static constexpr int16_t {var_name}_W = {width};\n')
+        f.write(f'static constexpr int16_t {var_name}_H = {height};\n\n')
 
         # RGB565 array
         f.write(f'// {width}×{height} pixels · {pix_bytes} bytes\n')
@@ -159,7 +161,10 @@ def convert(input_path: Path, output_path: Path, var_name: str,
             f.write('\n')
         f.write('};\n')
 
-        # Mask array
+        # Mask array — or nullptr sentinel so UI_IMG() works uniformly on every asset
+        if not emit_mask:
+            f.write(f'\n// Opaque image — no alpha mask\n')
+            f.write(f'static constexpr const uint8_t *{var_name}_mask = nullptr;\n')
         if emit_mask:
             MCOLS = row_mask_bytes  # one row per line
             f.write(f'\n// 1-bit alpha mask · {mask_sz} bytes '

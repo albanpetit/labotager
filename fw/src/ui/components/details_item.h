@@ -11,6 +11,8 @@
 
 #define DETAILS_ITEM_W  250
 #define DETAILS_ITEM_H  39
+static constexpr int16_t details_item_W = 250;
+static constexpr int16_t details_item_H = 39;
 
 // 250×39 pixels · 19500 bytes
 static const uint16_t details_item[] PROGMEM = {

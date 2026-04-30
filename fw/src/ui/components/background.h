@@ -9,6 +9,8 @@
 
 #define BACKGROUND_W  320
 #define BACKGROUND_H  240
+static constexpr int16_t background_W = 320;
+static constexpr int16_t background_H = 240;
 
 // 320×240 pixels · 153600 bytes
 static const uint16_t background[] PROGMEM = {
@@ -4813,3 +4815,6 @@ static const uint16_t background[] PROGMEM = {
   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 
   0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF
 };
+
+// Opaque image — no alpha mask
+static constexpr const uint8_t *background_mask = nullptr;

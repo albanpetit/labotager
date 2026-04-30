@@ -11,6 +11,8 @@
 
 #define HOME_OWNER_W  122
 #define HOME_OWNER_H  62
+static constexpr int16_t home_owner_W = 122;
+static constexpr int16_t home_owner_H = 62;
 
 // 122×62 pixels · 15128 bytes
 static const uint16_t home_owner[] PROGMEM = {
