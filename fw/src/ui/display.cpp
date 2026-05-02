@@ -120,7 +120,7 @@ static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Fin eclairage",     // PARAM_LED_END
   "Seuil humidite %",  // PARAM_SOIL
   "Duree arrosage s",  // PARAM_WATERING_DURATION
-  "Cooldown arros min",// PARAM_WATERING_COOLDOWN
+  "Temporisation arrosage min",// PARAM_WATERING_COOLDOWN
   "Temp min C",        // PARAM_TEMP_MIN
   "Temp max C",        // PARAM_TEMP_MAX
 };
