@@ -33,8 +33,10 @@
 #define LOG_FILE      "/logs/log.csv"
 
 // ─── Default parameter values ─────────────────────────────────────────────────
-#define DEFAULT_SOIL_THRESHOLD     5    // soil moisture threshold to trigger pump (%)
-#define DEFAULT_WATERING_CHECK_S   10   // seconds between pump re-checks
+#define DEFAULT_SOIL_THRESHOLD          5   // soil moisture threshold to trigger pump (%)
+#define DEFAULT_WATERING_CHECK_S       10   // seconds between pump re-checks
+#define DEFAULT_WATERING_DURATION_S     5   // max pump run time per cycle (s)
+#define DEFAULT_WATERING_COOLDOWN_MIN  30   // min time between watering cycles (min)
 #define DEFAULT_LED_START_HOUR      8   // grow light on  (08:00)
 #define DEFAULT_LED_START_MIN       0
 #define DEFAULT_LED_END_HOUR       22   // grow light off (22:00)
