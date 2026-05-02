@@ -109,7 +109,9 @@ static void settings_sanitize(Settings &s) {
   s.led_start_min    = (uint8_t) constrain(s.led_start_min,    0,    59);
   s.led_end_hour     = (uint8_t) constrain(s.led_end_hour,     0,    23);
   s.led_end_min      = (uint8_t) constrain(s.led_end_min,      0,    59);
-  s.log_interval_s   = (uint16_t)constrain(s.log_interval_s,   1,    86400);
+  s.log_interval_s      = (uint16_t)constrain(s.log_interval_s,      1,  86400);
+  s.sleep_enabled       = s.sleep_enabled ? true : false;
+  s.sleep_timeout_min   = (uint8_t) constrain(s.sleep_timeout_min,   1,     59);
   s.grow_start_day   = (uint8_t) constrain(s.grow_start_day,   0,    31);
   s.grow_start_month = (uint8_t) constrain(s.grow_start_month, 0,    12);
   // grow_start_year: 0 = not set; otherwise clamp to a plausible range
@@ -152,7 +154,9 @@ static void load_config(Settings &s) {
     else if (strcmp(key, "led_start_min")     == 0) s.led_start_min  = (uint8_t)val;
     else if (strcmp(key, "led_end_hour")      == 0) s.led_end_hour   = (uint8_t)val;
     else if (strcmp(key, "led_end_min")       == 0) s.led_end_min    = (uint8_t)val;
-    else if (strcmp(key, "log_interval_s")    == 0) s.log_interval_s   = (uint16_t)val;
+    else if (strcmp(key, "log_interval_s")    == 0) s.log_interval_s     = (uint16_t)val;
+    else if (strcmp(key, "sleep_enabled")     == 0) s.sleep_enabled       = (val != 0);
+    else if (strcmp(key, "sleep_timeout_min") == 0) s.sleep_timeout_min   = (uint8_t)val;
     else if (strcmp(key, "grow_start_day")    == 0) s.grow_start_day   = (uint8_t)val;
     else if (strcmp(key, "grow_start_month")  == 0) s.grow_start_month = (uint8_t)val;
     else if (strcmp(key, "grow_start_year")   == 0) s.grow_start_year  = (uint16_t)val;
@@ -184,7 +188,9 @@ void settings_apply_defaults(Settings &s) {
   s.led_start_min    = DEFAULT_LED_START_MIN;
   s.led_end_hour     = DEFAULT_LED_END_HOUR;
   s.led_end_min      = DEFAULT_LED_END_MIN;
-  s.log_interval_s   = DEFAULT_LOG_INTERVAL_S;
+  s.log_interval_s      = DEFAULT_LOG_INTERVAL_S;
+  s.sleep_enabled       = DEFAULT_SLEEP_ENABLED;
+  s.sleep_timeout_min   = DEFAULT_SLEEP_TIMEOUT_MIN;
   s.grow_start_day   = 0;
   s.grow_start_month = 0;
   s.grow_start_year  = 0;
@@ -332,7 +338,9 @@ void logger_save_settings(const Settings &s, void (*kick_wdt)()) {
   f.print("led_start_min=");  f.println(s.led_start_min);
   f.print("led_end_hour=");   f.println(s.led_end_hour);
   f.print("led_end_min=");    f.println(s.led_end_min);
-  f.print("log_interval_s=");     f.println(s.log_interval_s);
+  f.print("log_interval_s=");       f.println(s.log_interval_s);
+  f.print("sleep_enabled=");        f.println(s.sleep_enabled ? 1 : 0);
+  f.print("sleep_timeout_min=");    f.println(s.sleep_timeout_min);
   f.print("grow_start_day=");     f.println(s.grow_start_day);
   f.print("grow_start_month=");   f.println(s.grow_start_month);
   f.print("grow_start_year=");    f.println(s.grow_start_year);

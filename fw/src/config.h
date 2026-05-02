@@ -38,6 +38,8 @@
 #define DEFAULT_WATERING_ENABLED        1   // watering active by default (1=on, 0=off)
 #define DEFAULT_WATERING_DURATION_S     5   // max pump run time per cycle (s)
 #define DEFAULT_WATERING_COOLDOWN_MIN  30   // min time between watering cycles (min)
+#define DEFAULT_SLEEP_ENABLED           1   // screen auto-sleep active by default (1=on, 0=off)
+#define DEFAULT_SLEEP_TIMEOUT_MIN       5   // inactivity delay before screen sleeps (min)
 #define DEFAULT_LED_START_HOUR      8   // grow light on  (08:00)
 #define DEFAULT_LED_START_MIN       0
 #define DEFAULT_LED_END_HOUR       22   // grow light off (22:00)

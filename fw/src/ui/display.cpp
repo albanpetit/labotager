@@ -34,6 +34,10 @@ static uint32_t last_refresh_ms         = 0;
 static uint32_t last_details_refresh_ms = 0;
 static bool     sd_error_shown          = false;
 
+// Screen sleep state — backlight cut after inactivity, restored on first encoder event
+static bool     screen_sleeping         = false;
+static uint32_t last_interaction_ms     = 0;   // set on first display_update() call
+
 // Hardware diagnostic screens — re-triggered each time an error (re)appears.
 // The _displayed flags prevent re-showing while the error is still active.
 // The prev_* flags detect error-clear→re-error transitions so a sensor that
@@ -108,23 +112,27 @@ enum ParamIndex {
   PARAM_WATERING_ENABLED  = 6,   // watering on/off toggle
   PARAM_WATERING_DURATION = 7,   // max pump on time per cycle (s)
   PARAM_WATERING_COOLDOWN = 8,   // min time between watering cycles (min)
-  PARAM_TEMP_MIN          = 9,   // minimum temperature °C
-  PARAM_TEMP_MAX          = 10,  // maximum temperature °C
-  PARAM_COUNT             = 11,
+  PARAM_SLEEP_ENABLED     = 9,   // screen auto-sleep on/off toggle
+  PARAM_SLEEP_TIMEOUT     = 10,  // inactivity delay before sleep (min, 1–59)
+  PARAM_TEMP_MIN          = 11,  // minimum temperature °C
+  PARAM_TEMP_MAX          = 12,  // maximum temperature °C
+  PARAM_COUNT             = 13,
 };
 
 static const char * const PARAM_LABELS[PARAM_COUNT] = {
-  "Heure",             // PARAM_TIME
-  "Date",              // PARAM_DATE
-  "Debut pousse",      // PARAM_GROW_START
-  "Debut eclairage",   // PARAM_LED_START
-  "Fin eclairage",     // PARAM_LED_END
-  "Seuil humidite %",           // PARAM_SOIL
-  "Arrosage",                   // PARAM_WATERING_ENABLED
-  "Duree arrosage s",           // PARAM_WATERING_DURATION
-  "Temporisation arrosage min", // PARAM_WATERING_COOLDOWN
-  "Temp min C",        // PARAM_TEMP_MIN
-  "Temp max C",        // PARAM_TEMP_MAX
+  "Heure",                       // PARAM_TIME
+  "Date",                        // PARAM_DATE
+  "Debut pousse",                // PARAM_GROW_START
+  "Debut eclairage",             // PARAM_LED_START
+  "Fin eclairage",               // PARAM_LED_END
+  "Seuil humidite %",            // PARAM_SOIL
+  "Arrosage",                    // PARAM_WATERING_ENABLED
+  "Duree arrosage s",            // PARAM_WATERING_DURATION
+  "Temporisation arrosage min",  // PARAM_WATERING_COOLDOWN
+  "Veille ecran",                // PARAM_SLEEP_ENABLED
+  "Delai veille min",            // PARAM_SLEEP_TIMEOUT
+  "Temp min C",                  // PARAM_TEMP_MIN
+  "Temp max C",                  // PARAM_TEMP_MAX
 };
 
 // Active sub-field within a combined row:
@@ -145,6 +153,8 @@ static int get_param_val(int i, const Settings &s) {
     case PARAM_WATERING_ENABLED:  return s.watering_enabled ? 1 : 0;
     case PARAM_WATERING_DURATION: return s.watering_duration_s;
     case PARAM_WATERING_COOLDOWN: return s.watering_cooldown_min;
+    case PARAM_SLEEP_ENABLED:     return s.sleep_enabled ? 1 : 0;
+    case PARAM_SLEEP_TIMEOUT:     return s.sleep_timeout_min;
     case PARAM_TEMP_MIN:          return s.plant_temp_min;
     case PARAM_TEMP_MAX:          return s.plant_temp_max;
     default:                      return 0;
@@ -198,6 +208,12 @@ static void apply_delta(int i, int delta, Settings &s) {
       settings_dirty = true; break;
     case PARAM_WATERING_COOLDOWN:
       s.watering_cooldown_min = (uint16_t)constrain(s.watering_cooldown_min + delta, 1, 1440);
+      settings_dirty = true; break;
+    case PARAM_SLEEP_ENABLED:
+      s.sleep_enabled = !s.sleep_enabled;
+      settings_dirty = true; break;
+    case PARAM_SLEEP_TIMEOUT:
+      s.sleep_timeout_min = (uint8_t)constrain(s.sleep_timeout_min + delta, 1, 59);
       settings_dirty = true; break;
     case PARAM_TEMP_MIN:
       s.plant_temp_min = (int8_t)constrain(s.plant_temp_min + delta, -40, 60);
@@ -459,7 +475,7 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
     }
   } else {
     int v = get_param_val(item_idx, s);
-    if (item_idx == PARAM_WATERING_ENABLED)
+    if (item_idx == PARAM_WATERING_ENABLED || item_idx == PARAM_SLEEP_ENABLED)
       snprintf(val, sizeof(val), "%s", v ? "ON" : "OFF");
     else
       snprintf(val, sizeof(val), "%d", v);
@@ -582,6 +598,30 @@ void display_init() {
 
 bool display_update(SensorData &data, Settings &settings, EncEvent ev) {
   settings_dirty = false;
+
+  // ── Inactivity timer initialisation (first call only) ────────────────────
+  if (last_interaction_ms == 0) last_interaction_ms = millis();
+
+  // ── Screen sleep / wake ──────────────────────────────────────────────────
+  if (screen_sleeping) {
+    if (ev != ENC_NONE) {
+      // First interaction after sleep: wake up without processing the event.
+      screen_sleeping  = false;
+      last_interaction_ms = millis();
+      digitalWrite(TFT_BL, HIGH);
+      need_full_redraw = true;
+    }
+    return false;
+  }
+  if (ev != ENC_NONE) last_interaction_ms = millis();
+  if (settings.sleep_enabled) {
+    uint32_t timeout_ms = (uint32_t)settings.sleep_timeout_min * 60000UL;
+    if (millis() - last_interaction_ms >= timeout_ms) {
+      screen_sleeping = true;
+      digitalWrite(TFT_BL, LOW);
+      return false;
+    }
+  }
 
   // ── SD error overlay — highest priority, blocks all normal interaction ────
   if (data.sd_error) {

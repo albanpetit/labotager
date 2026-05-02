@@ -57,6 +57,8 @@ struct Settings {
   uint8_t  led_end_min;           // grow light off minute (default 0)
 
   uint16_t log_interval_s;        // seconds between CSV entries (default 300)
+  bool     sleep_enabled;         // screen auto-sleep active (default true)
+  uint8_t  sleep_timeout_min;     // inactivity delay before sleep in minutes (1–59, default 5)
 
   uint8_t  grow_start_day;        // grow start date — day   (0 = not set)
   uint8_t  grow_start_month;      // grow start date — month (0 = not set)
