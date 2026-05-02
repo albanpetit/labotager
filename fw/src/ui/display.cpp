@@ -105,11 +105,12 @@ enum ParamIndex {
   PARAM_LED_START         = 3,   // combined HH:MM        (led_start_hour, led_start_min)
   PARAM_LED_END           = 4,   // combined HH:MM        (led_end_hour, led_end_min)
   PARAM_SOIL              = 5,   // soil moisture threshold %
-  PARAM_WATERING_DURATION = 6,   // max pump on time per cycle (s)
-  PARAM_WATERING_COOLDOWN = 7,   // min time between watering cycles (min)
-  PARAM_TEMP_MIN          = 8,   // minimum temperature °C
-  PARAM_TEMP_MAX          = 9,   // maximum temperature °C
-  PARAM_COUNT             = 10,
+  PARAM_WATERING_ENABLED  = 6,   // watering on/off toggle
+  PARAM_WATERING_DURATION = 7,   // max pump on time per cycle (s)
+  PARAM_WATERING_COOLDOWN = 8,   // min time between watering cycles (min)
+  PARAM_TEMP_MIN          = 9,   // minimum temperature °C
+  PARAM_TEMP_MAX          = 10,  // maximum temperature °C
+  PARAM_COUNT             = 11,
 };
 
 static const char * const PARAM_LABELS[PARAM_COUNT] = {
@@ -118,9 +119,10 @@ static const char * const PARAM_LABELS[PARAM_COUNT] = {
   "Debut pousse",      // PARAM_GROW_START
   "Debut eclairage",   // PARAM_LED_START
   "Fin eclairage",     // PARAM_LED_END
-  "Seuil humidite %",  // PARAM_SOIL
-  "Duree arrosage s",  // PARAM_WATERING_DURATION
-  "Temporisation arrosage min",// PARAM_WATERING_COOLDOWN
+  "Seuil humidite %",           // PARAM_SOIL
+  "Arrosage",                   // PARAM_WATERING_ENABLED
+  "Duree arrosage s",           // PARAM_WATERING_DURATION
+  "Temporisation arrosage min", // PARAM_WATERING_COOLDOWN
   "Temp min C",        // PARAM_TEMP_MIN
   "Temp max C",        // PARAM_TEMP_MAX
 };
@@ -140,6 +142,7 @@ static int combined_sub_count(int i) {
 static int get_param_val(int i, const Settings &s) {
   switch (i) {
     case PARAM_SOIL:              return s.soil_threshold;
+    case PARAM_WATERING_ENABLED:  return s.watering_enabled ? 1 : 0;
     case PARAM_WATERING_DURATION: return s.watering_duration_s;
     case PARAM_WATERING_COOLDOWN: return s.watering_cooldown_min;
     case PARAM_TEMP_MIN:          return s.plant_temp_min;
@@ -186,6 +189,9 @@ static void apply_delta(int i, int delta, Settings &s) {
     }
     case PARAM_SOIL:
       s.soil_threshold = (uint8_t)constrain(s.soil_threshold + delta, 0, 100);
+      settings_dirty = true; break;
+    case PARAM_WATERING_ENABLED:
+      s.watering_enabled = !s.watering_enabled;
       settings_dirty = true; break;
     case PARAM_WATERING_DURATION:
       s.watering_duration_s = (uint16_t)constrain(s.watering_duration_s + delta, 1, 300);
@@ -453,7 +459,10 @@ static void render_param_row(int item_idx, int slot, bool selected, bool editing
     }
   } else {
     int v = get_param_val(item_idx, s);
-    snprintf(val, sizeof(val), "%d", v);
+    if (item_idx == PARAM_WATERING_ENABLED)
+      snprintf(val, sizeof(val), "%s", v ? "ON" : "OFF");
+    else
+      snprintf(val, sizeof(val), "%d", v);
   }
 
   render_row_text(y, label, val, editing ? (uint16_t)UI_COLOR_EDIT : (uint16_t)UI_COLOR_TEXT);

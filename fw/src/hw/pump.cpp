@@ -49,7 +49,8 @@ void pump_update(SensorData &data, const Settings &settings) {
       bool cooldown_ok = !pump_ever_run ||
                          (now - pump_last_stop_ms >=
                           (uint32_t)settings.watering_cooldown_min * 60000UL);
-      if (data.led_on && data.soil_pct < settings.soil_threshold && cooldown_ok) {
+      if (settings.watering_enabled && data.led_on &&
+          data.soil_pct < settings.soil_threshold && cooldown_ok) {
         digitalWrite(GPIO_MOTOR, HIGH);
         pump_state    = PUMP_PUMPING;
         pump_start_ms = now;

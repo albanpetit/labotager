@@ -35,6 +35,7 @@
 // ─── Default parameter values ─────────────────────────────────────────────────
 #define DEFAULT_SOIL_THRESHOLD          5   // soil moisture threshold to trigger pump (%)
 #define DEFAULT_WATERING_CHECK_S       10   // seconds between pump re-checks
+#define DEFAULT_WATERING_ENABLED        1   // watering active by default (1=on, 0=off)
 #define DEFAULT_WATERING_DURATION_S     5   // max pump run time per cycle (s)
 #define DEFAULT_WATERING_COOLDOWN_MIN  30   // min time between watering cycles (min)
 #define DEFAULT_LED_START_HOUR      8   // grow light on  (08:00)
