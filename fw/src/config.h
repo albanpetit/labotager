@@ -28,9 +28,10 @@
 
 // ─── SD ───────────────────────────────────────────────────────────────────────
 #define SD_SPEED_MHZ  10
-#define CONFIG_FILE   "/config.txt"
-#define LOG_DIR       "/logs"
-#define LOG_FILE      "/logs/log.csv"
+#define CONFIG_FILE     "/config.txt"
+#define LOG_DIR         "/logs"
+#define LOG_FILE        "/logs/log.csv"
+#define CONFIG_VERSION  1   // bumped if the config.txt format changes; written/checked as a sentinel line
 
 // ─── Default parameter values ─────────────────────────────────────────────────
 #define DEFAULT_SOIL_THRESHOLD          5   // soil moisture threshold to trigger pump (%)

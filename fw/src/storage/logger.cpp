@@ -89,6 +89,7 @@ static void ensure_log_structure() {
     File32 f = sd.open(LOG_FILE, O_WRONLY | O_CREAT);
     if (f) {
       f.println("id,date,heure,jour_croissance,temp_air_c,hum_air_pct,hum_sol_pct,duree_eclairage_min");
+      f.sync();
       f.close();
     }
   }
@@ -119,9 +120,16 @@ static void settings_sanitize(Settings &s) {
     s.grow_start_year = (uint16_t)constrain(s.grow_start_year, 2020, 2099);
 }
 
+// Parses config.txt into a scratch copy of the settings, only committing it to
+// `s` if the version sentinel line was found intact. This avoids silently
+// merging defaults with whatever fields survived a partially corrupted file
+// (e.g. after a power loss mid-write left a truncated/garbled config.txt).
 static void load_config(Settings &s) {
   File32 f = sd.open(CONFIG_FILE, O_RDONLY);
   if (!f) return;
+
+  Settings tmp        = s;
+  bool     version_ok = false;
 
   char line[64];
   while (f.available()) {
@@ -140,12 +148,12 @@ static void load_config(Settings &s) {
     const char *key = line;
 
     if (strcmp(key, "owner_name") == 0) {
-      strncpy(s.owner_name, eq + 1, sizeof(s.owner_name) - 1);
-      s.owner_name[sizeof(s.owner_name) - 1] = '\0';
+      strncpy(tmp.owner_name, eq + 1, sizeof(tmp.owner_name) - 1);
+      tmp.owner_name[sizeof(tmp.owner_name) - 1] = '\0';
       // Strip trailing CR/LF that may remain after the line read
-      int olen = strlen(s.owner_name);
-      while (olen > 0 && (s.owner_name[olen-1] == '\r' || s.owner_name[olen-1] == '\n'))
-        s.owner_name[--olen] = '\0';
+      int olen = strlen(tmp.owner_name);
+      while (olen > 0 && (tmp.owner_name[olen-1] == '\r' || tmp.owner_name[olen-1] == '\n'))
+        tmp.owner_name[--olen] = '\0';
       continue;
     }
 
@@ -154,25 +162,33 @@ static void load_config(Settings &s) {
     if (endptr == eq + 1) continue;   // no valid digits — skip malformed line
     int val = (int)val_long;
 
-    if      (strcmp(key, "soil_threshold")    == 0) s.soil_threshold = (uint8_t)val;
-    else if (strcmp(key, "plant_temp_min")    == 0) s.plant_temp_min = (int8_t)val;
-    else if (strcmp(key, "plant_temp_max")    == 0) s.plant_temp_max = (int8_t)val;
-    else if (strcmp(key, "watering_check_s")     == 0) s.watering_check_s     = (uint16_t)val;
-    else if (strcmp(key, "watering_enabled")     == 0) s.watering_enabled     = (val != 0);
-    else if (strcmp(key, "watering_duration_s")  == 0) s.watering_duration_s  = (uint16_t)val;
-    else if (strcmp(key, "watering_cooldown_min")== 0) s.watering_cooldown_min= (uint16_t)val;
-    else if (strcmp(key, "led_start_hour")    == 0) s.led_start_hour = (uint8_t)val;
-    else if (strcmp(key, "led_start_min")     == 0) s.led_start_min  = (uint8_t)val;
-    else if (strcmp(key, "led_end_hour")      == 0) s.led_end_hour   = (uint8_t)val;
-    else if (strcmp(key, "led_end_min")       == 0) s.led_end_min    = (uint8_t)val;
-    else if (strcmp(key, "log_interval_s")    == 0) s.log_interval_s     = (uint16_t)val;
-    else if (strcmp(key, "sleep_enabled")     == 0) s.sleep_enabled       = (val != 0);
-    else if (strcmp(key, "sleep_timeout_min") == 0) s.sleep_timeout_min   = (uint8_t)val;
-    else if (strcmp(key, "grow_start_day")    == 0) s.grow_start_day   = (uint8_t)val;
-    else if (strcmp(key, "grow_start_month")  == 0) s.grow_start_month = (uint8_t)val;
-    else if (strcmp(key, "grow_start_year")   == 0) s.grow_start_year  = (uint16_t)val;
+    if      (strcmp(key, "config_version")    == 0) version_ok = (val == CONFIG_VERSION);
+    else if (strcmp(key, "soil_threshold")    == 0) tmp.soil_threshold = (uint8_t)val;
+    else if (strcmp(key, "plant_temp_min")    == 0) tmp.plant_temp_min = (int8_t)val;
+    else if (strcmp(key, "plant_temp_max")    == 0) tmp.plant_temp_max = (int8_t)val;
+    else if (strcmp(key, "watering_check_s")     == 0) tmp.watering_check_s     = (uint16_t)val;
+    else if (strcmp(key, "watering_enabled")     == 0) tmp.watering_enabled     = (val != 0);
+    else if (strcmp(key, "watering_duration_s")  == 0) tmp.watering_duration_s  = (uint16_t)val;
+    else if (strcmp(key, "watering_cooldown_min")== 0) tmp.watering_cooldown_min= (uint16_t)val;
+    else if (strcmp(key, "led_start_hour")    == 0) tmp.led_start_hour = (uint8_t)val;
+    else if (strcmp(key, "led_start_min")     == 0) tmp.led_start_min  = (uint8_t)val;
+    else if (strcmp(key, "led_end_hour")      == 0) tmp.led_end_hour   = (uint8_t)val;
+    else if (strcmp(key, "led_end_min")       == 0) tmp.led_end_min    = (uint8_t)val;
+    else if (strcmp(key, "log_interval_s")    == 0) tmp.log_interval_s     = (uint16_t)val;
+    else if (strcmp(key, "sleep_enabled")     == 0) tmp.sleep_enabled       = (val != 0);
+    else if (strcmp(key, "sleep_timeout_min") == 0) tmp.sleep_timeout_min   = (uint8_t)val;
+    else if (strcmp(key, "grow_start_day")    == 0) tmp.grow_start_day   = (uint8_t)val;
+    else if (strcmp(key, "grow_start_month")  == 0) tmp.grow_start_month = (uint8_t)val;
+    else if (strcmp(key, "grow_start_year")   == 0) tmp.grow_start_year  = (uint16_t)val;
   }
   f.close();
+
+  if (!version_ok) {
+    if (Serial) Serial.println("[SD] Config file missing/invalid version marker — keeping current settings");
+    return;
+  }
+
+  s = tmp;
   settings_sanitize(s);
   if (Serial) Serial.println("[SD] Config loaded from " CONFIG_FILE);
 }
@@ -301,6 +317,7 @@ void logger_update(SensorData &data, const Settings &settings, void (*kick_wdt)(
   }
   f.print(buf);
   f.print('\n');
+  f.sync();
   f.close();
 
   data.last_save_hour  = data.hour;
@@ -330,6 +347,7 @@ void logger_save_settings(const Settings &s, void (*kick_wdt)()) {
     return;
   }
 
+  f.print("config_version="); f.println(CONFIG_VERSION);
   f.print("soil_threshold="); f.println(s.soil_threshold);
   f.print("plant_temp_min="); f.println(s.plant_temp_min);
   f.print("plant_temp_max="); f.println(s.plant_temp_max);
@@ -348,6 +366,7 @@ void logger_save_settings(const Settings &s, void (*kick_wdt)()) {
   f.print("grow_start_month=");   f.println(s.grow_start_month);
   f.print("grow_start_year=");    f.println(s.grow_start_year);
   f.print("owner_name=");         f.println(s.owner_name);
+  f.sync();
   f.close();
 
   // Replace config.txt atomically: remove old, rename temp into place.
