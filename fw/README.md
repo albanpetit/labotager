@@ -133,13 +133,17 @@ Les valeurs sont rechargées au démarrage. Toute modification via le menu est s
 ## Format du log CSV `/logs/log.csv`
 
 ```
-datetime,air_temp_c,air_hum_pct,soil_pct,pump,led
-2025-06-15T08:05:00,23.45,58.2,42,0,1
-2025-06-15T08:10:00,23.51,57.8,35,1,1
+id,date,heure,jour_croissance,temp_air_c,hum_air_pct,hum_sol_pct,duree_eclairage_min
+1,15/06/2025,08:05:00,3,23.45,58.2,42,840
+2,15/06/2025,08:10:00,3,23.51,57.8,35,840
 ```
 
-- `pump` et `led` : 0 = OFF, 1 = ON
-- Une ligne toutes les `log_interval_s` secondes (défaut : 5 minutes)
+- `jour_croissance` : nombre de jours écoulés depuis `grow_start_day/month/year` (0 si non défini)
+- `duree_eclairage_min` : durée quotidienne programmée de l'éclairage, en minutes (dérivée de `led_start_*`/`led_end_*`)
+- `temp_air_c`/`hum_air_pct` vides si l'AHT20 est indisponible
+- Une ligne toutes les `log_interval_s` secondes (défaut : 3 h)
+
+Si le format de colonnes change entre deux versions du firmware, `ensure_log_structure()` détecte que l'en-tête de `log.csv` ne correspond plus à celui attendu, archive l'ancien fichier vers `/logs/log_old.csv`, puis recrée `log.csv` avec le nouvel en-tête — évitant que des lignes au nouveau format se retrouvent sous un en-tête obsolète.
 
 ---
 

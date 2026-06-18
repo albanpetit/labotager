@@ -8,6 +8,8 @@
 #define SD_RETRY_INTERVAL_MS   5000   // delay before re-attempting SD init after failure (ms)
 #define SD_HEALTH_INTERVAL_MS 10000   // interval between SD card health checks (ms)
 #define CSV_LOG_LINE_LEN         80   // "N,DD/MM/YYYY,HH:MM:SS,GGGG,±TT.TT,HHH.H,SSS,DDDD\0" ~58 chars; 80 gives margin
+#define LOG_HEADER  "id,date,heure,jour_croissance,temp_air_c,hum_air_pct,hum_sol_pct,duree_eclairage_min"
+#define LOG_ARCHIVE_FILE  "/logs/log_old.csv"
 
 // SPI1 hardware — pins defined in config.h
 static MbedSPI   sdSPI(GPIO_SD_MISO, GPIO_SD_MOSI, GPIO_SD_SCK);
@@ -83,12 +85,40 @@ static uint16_t led_daily_duration_min(const Settings &s) {
                        : (uint16_t)(MINUTES_PER_DAY - start + end);
 }
 
+// True if LOG_FILE's first line matches the header this firmware writes.
+// False on any mismatch, including an empty/unreadable file.
+static bool log_header_matches() {
+  File32 f = sd.open(LOG_FILE, O_RDONLY);
+  if (!f) return true;   // file missing — nothing to migrate, ensure_log_structure() will create it
+
+  char buf[sizeof(LOG_HEADER) + 4];
+  uint8_t len = 0;
+  while (f.available() && len < sizeof(buf) - 1) {
+    char c = (char)f.read();
+    if (c == '\n') break;
+    if (c != '\r') buf[len++] = c;
+  }
+  buf[len] = '\0';
+  f.close();
+  return strcmp(buf, LOG_HEADER) == 0;
+}
+
+// Move a log.csv left behind by an older firmware version (different column
+// layout) out of the way, so new rows are never appended under a stale header.
+// Only one archive slot is kept — a second schema change overwrites it.
+static void archive_stale_log() {
+  if (sd.exists(LOG_ARCHIVE_FILE)) sd.remove(LOG_ARCHIVE_FILE);
+  sd.rename(LOG_FILE, LOG_ARCHIVE_FILE);
+  if (Serial) Serial.println("[SD] Log column layout changed — archived previous log.csv to log_old.csv");
+}
+
 static void ensure_log_structure() {
   if (!sd.exists(LOG_DIR)) sd.mkdir(LOG_DIR);
+  if (sd.exists(LOG_FILE) && !log_header_matches()) archive_stale_log();
   if (!sd.exists(LOG_FILE)) {
     File32 f = sd.open(LOG_FILE, O_WRONLY | O_CREAT);
     if (f) {
-      f.println("id,date,heure,jour_croissance,temp_air_c,hum_air_pct,hum_sol_pct,duree_eclairage_min");
+      f.println(LOG_HEADER);
       f.sync();
       f.close();
     }
