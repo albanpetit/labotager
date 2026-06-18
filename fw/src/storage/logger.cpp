@@ -138,6 +138,17 @@ static void load_config(Settings &s) {
     if (!eq) continue;
     *eq             = '\0';
     const char *key = line;
+
+    if (strcmp(key, "owner_name") == 0) {
+      strncpy(s.owner_name, eq + 1, sizeof(s.owner_name) - 1);
+      s.owner_name[sizeof(s.owner_name) - 1] = '\0';
+      // Strip trailing CR/LF that may remain after the line read
+      int olen = strlen(s.owner_name);
+      while (olen > 0 && (s.owner_name[olen-1] == '\r' || s.owner_name[olen-1] == '\n'))
+        s.owner_name[--olen] = '\0';
+      continue;
+    }
+
     char       *endptr;
     long        val_long = strtol(eq + 1, &endptr, 10);
     if (endptr == eq + 1) continue;   // no valid digits — skip malformed line
@@ -160,14 +171,6 @@ static void load_config(Settings &s) {
     else if (strcmp(key, "grow_start_day")    == 0) s.grow_start_day   = (uint8_t)val;
     else if (strcmp(key, "grow_start_month")  == 0) s.grow_start_month = (uint8_t)val;
     else if (strcmp(key, "grow_start_year")   == 0) s.grow_start_year  = (uint16_t)val;
-    else if (strcmp(key, "owner_name")        == 0) {
-      strncpy(s.owner_name, eq + 1, sizeof(s.owner_name) - 1);
-      s.owner_name[sizeof(s.owner_name) - 1] = '\0';
-      // Strip trailing CR/LF that may remain after the line read
-      int olen = strlen(s.owner_name);
-      while (olen > 0 && (s.owner_name[olen-1] == '\r' || s.owner_name[olen-1] == '\n'))
-        s.owner_name[--olen] = '\0';
-    }
   }
   f.close();
   settings_sanitize(s);
