@@ -24,7 +24,7 @@
 
 // ─── ADC ──────────────────────────────────────────────────────────────────────
 #define SOIL_DRY_VAL  3500   // ADC reading in open air (dry)
-#define SOIL_WET_VAL   800   // ADC reading submerged in water (wet)
+#define SOIL_WET_VAL  1583   // ADC reading submerged in water (wet)
 
 // ─── SD ───────────────────────────────────────────────────────────────────────
 #define SD_SPEED_MHZ  10
