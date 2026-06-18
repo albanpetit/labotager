@@ -38,6 +38,7 @@ extern MbedI2C rtcWire;
 
 // Soil moisture ADC
 #define SOIL_READ_INTERVAL_MS    500   // ADC sampling interval (ms)
+#define SOIL_OVERSAMPLE            8   // samples averaged per reading, to reject ADC noise
 
 // AHT20 raw-to-physical conversion (datasheet section 6.1)
 // Both humidity and temperature use 20-bit unsigned values (range 0..2^20-1).
@@ -114,8 +115,10 @@ void sensors_update(SensorData &data) {
   // ── Soil moisture (ADC, every 500 ms) ────────────────────────────────────
   static uint32_t last_soil = 0;
   if (now - last_soil >= SOIL_READ_INTERVAL_MS) {
-    last_soil     = now;
-    data.soil_raw = analogRead(GPIO_SOIL);
+    last_soil = now;
+    uint32_t soil_sum = 0;
+    for (uint8_t i = 0; i < SOIL_OVERSAMPLE; i++) soil_sum += analogRead(GPIO_SOIL);
+    data.soil_raw = (int)(soil_sum / SOIL_OVERSAMPLE);
     data.soil_pct = (uint8_t)constrain(
         map(data.soil_raw, SOIL_DRY_VAL, SOIL_WET_VAL, 0, 100), 0, 100);
   }
